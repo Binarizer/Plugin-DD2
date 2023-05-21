@@ -50,6 +50,14 @@
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\BepInEx\core\BepInEx.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="FMODUnity">
+      <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\FMODUnity.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="FMODUnityResonance">
+      <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\FMODUnityResonance.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="IronCrown">
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\IronCrown.dll</HintPath>
       <Private>False</Private>
@@ -67,6 +75,10 @@
     <Reference Include="System.Transactions" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="Unity.InputSystem">
+      <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\Unity.InputSystem.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>

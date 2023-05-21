@@ -1,6 +1,8 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using HarmonyLib;
 using BepInEx;
 using Assets.Code.Utils;
@@ -10,6 +12,15 @@ using Assets.Code.Campaign;
 using Assets.Code.UI.Widgets;
 using Assets.Code.Actor;
 using Assets.Code.Library;
+using Assets.Code.UI;
+using Assets.Code.Run;
+using Assets.Code.Source;
+using Assets.Code.Game;
+using Assets.Code.UI.Managers;
+using Assets.Code.Utils.Serialization;
+using Assets.Code.Audio;
+using UnityEngine.Networking.Types;
+using Assets.Code.UI.Screens;
 
 namespace DD2
 {
@@ -173,5 +184,132 @@ namespace DD2
             InputSystemBhv.RemoveListener("ChangeCharacter", new InputActionDelegate(HandleInputReplaceActor));
             InputSystemBhv.RemoveListener("ChangePath", new InputActionDelegate(HandleInputReplacePath));
         }
+
+        /// <summary>
+        /// 输入事件
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(InputSystemBhv), "Update")]
+        public static void InputHack(ref InputSystemBhv __instance)
+        {
+            if (__instance.GetPointerValues().m_rightButton.m_wasPressed)
+            {
+                System.Console.WriteLine("Mouse Right!");
+
+                // 减少火炬15点: 右键点马车的火炬
+                var coachTorch = Traverse.Create(SingletonMonoBehaviour<GameUIBhv>.Instance)?
+                    .Field("m_stageCoachTorch")?
+                    .Field("m_hoverState")?
+                    .GetValue<UIHoverStateBhv>();
+                if (coachTorch && coachTorch.IsHoveringOver)
+                {
+                    SingletonMonoBehaviour<RunBhv>.Instance.RunValues.ChangeValue(RunValueType.TORCH, -15.0f, SourceType.TORCH);
+                }
+                // 减少火炬15点: 右键点战斗中火炬
+                var battleTorchTip = Traverse.Create(SingletonMonoBehaviour<CombatUiBhv>.Instance)?
+                    .Field("m_battleInfoBhv")?
+                    .Field("m_torchBhv")?
+                    .Field("m_tooltipGO")?
+                    .GetValue<GameObject>();
+                if (battleTorchTip && battleTorchTip.activeSelf)
+                {
+                    SingletonMonoBehaviour<RunBhv>.Instance.RunValues.ChangeValue(RunValueType.TORCH, -15.0f, SourceType.TORCH);
+                }
+            }
+
+            // 快速保存
+            if (Keyboard.current.f3Key.wasPressedThisFrame)
+            {
+                CopyCurrentSaveToQuickSave();
+            }
+        }
+
+        /// <summary>
+        /// Microsoft CopyDirectory
+        /// </summary>
+        static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        {
+            // Get information about the source directory
+            var dir = new DirectoryInfo(sourceDir);
+
+            // Check if the source directory exists
+            if (!dir.Exists)
+                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+            // Cache directories before we start copying
+            DirectoryInfo[] dirs = dir.GetDirectories();
+
+            // Create the destination directory
+            Directory.CreateDirectory(destinationDir);
+
+            // Get the files in the source directory and copy to the destination directory
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath);
+            }
+
+            // If recursive and copying subdirectories, recursively call this method
+            if (recursive)
+            {
+                foreach (DirectoryInfo subDir in dirs)
+                {
+                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                    CopyDirectory(subDir.FullName, newDestinationDir, true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 将当前存档设为即时存档
+        /// </summary>
+        static void CopyCurrentSaveToQuickSave()
+        {
+            string lastSaveDir = SaveUtils.GetMostRecentValidRunSaveFile(null);
+            System.Console.WriteLine($"last save dir = {lastSaveDir}");
+            if (string.IsNullOrEmpty(lastSaveDir))
+                return;
+            string quickSaveDir = SaveUtils.GetRunSavesRootPath(false) + "\\QuickSave";
+            System.Console.WriteLine($"quick save dir = {quickSaveDir}");
+
+            SingletonMonoBehaviour<AudioMgr>.Instance.Play(AudioPathsBhv.ClickConfirm, 8, null);
+            var dir = new DirectoryInfo(quickSaveDir);
+            if (dir.Exists)
+                Directory.Delete(quickSaveDir, true);
+            CopyDirectory(lastSaveDir, quickSaveDir, true);
+        }
+
+        /// <summary>
+        /// 用即时存档覆盖当前存档
+        /// </summary>
+        static void OverwriteLastSaveFromQuickSave()
+        {
+            string lastSaveDir = SaveUtils.GetMostRecentValidRunSaveFile(null);
+            System.Console.WriteLine($"last save dir = {lastSaveDir}");
+            if (string.IsNullOrEmpty(lastSaveDir))
+                return;
+            string quickSaveDir = SaveUtils.GetRunSavesRootPath(false) + "\\QuickSave";
+            System.Console.WriteLine($"quick save dir = {quickSaveDir}");
+            var dir = new DirectoryInfo(quickSaveDir);
+            if (!dir.Exists)
+                return;
+            dir = new DirectoryInfo(lastSaveDir);
+            if (dir.Exists)
+                Directory.Delete(lastSaveDir, true);
+            CopyDirectory(quickSaveDir, lastSaveDir, true);
+        }
+
+        /// <summary>
+        /// 按住Alt继续游戏，尝试用快速存档替换新存档
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(MainMenuUiScreenBhv), "OnContinueGameClick")]
+        public static bool TryLoadQuickSave()
+        {
+            if (Keyboard.current.altKey.isPressed)
+            {
+                OverwriteLastSaveFromQuickSave();
+            }
+            return true;
+        }
+
     }
 }
