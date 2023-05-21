@@ -21,6 +21,10 @@ using Assets.Code.Utils.Serialization;
 using Assets.Code.Audio;
 using UnityEngine.Networking.Types;
 using Assets.Code.UI.Screens;
+using Assets.Code.Game.Events;
+using Assets.Code.Item.Events;
+using Assets.Code.Rules;
+using Assets.Code.Quirk;
 
 namespace DD2
 {
@@ -311,5 +315,44 @@ namespace DD2
             return true;
         }
 
+        /// <summary>
+        /// 医院强制锁定或去除怪癖
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(HospitalScreenBhv), "HandleOnClickedQuirksBuyButton")]
+        public static bool ForceRemoveOrLockQuirk(ref HospitalScreenBhv __instance)
+        {
+            Traverse t = Traverse.Create(__instance);
+            QuirkInstance quirk = t.Field("m_selectedQuirkToTreat").GetValue<QuirkInstance>();
+            ActorInstance actor = t.Field("m_selectedActor").GetValue<ActorInstance>();
+            int num = 0;
+            bool isLock = false;
+            if (t.Field("m_lockableQuirks").Method("Contains", new object[] { quirk }).GetValue<bool>())
+            {
+                isLock = true;
+                num = quirk.Definition.GetLockCost();
+            }
+            else if (t.Field("m_removableQuirks").Method("Contains", new object[] { quirk }).GetValue<bool>())
+            {
+                num = quirk.Definition.GetRemoveCost();
+            }
+            if (Keyboard.current.shiftKey.isPressed)
+                isLock = true;
+            if (Keyboard.current.altKey.isPressed)
+                isLock = false;
+            if (num > 0 && SingletonMonoBehaviour<RunBhv>.Instance.PlayerInventory.GetItemQty(RulesManager.GetRules<InventoryRules>().GOLD) >= num)
+            {
+                SingletonMonoBehaviour<RunBhv>.Instance.PlayerInventory.RemoveItem(RulesManager.GetRules<InventoryRules>().GOLD, num);
+                if (isLock)
+                    quirk.Lock();
+                else
+                    actor.QuirkContainer.Remove(quirk, SourceType.HOSPITAL, null, 0u, true);
+                EventHospitalQuirkTreated.Trigger(actor.m_ActorGuid, quirk.Definition.Id, isLock);
+                t.Field("m_selectedQuirkToTreat").SetValue(null);
+                t.Method("UpdateValues").GetValue();
+                EventUpdatePlayerCurrency.Trigger();
+            }
+            
+            return false;
+        }
     }
 }
