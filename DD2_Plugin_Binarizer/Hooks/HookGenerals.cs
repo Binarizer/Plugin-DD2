@@ -23,16 +23,21 @@ using Assets.Code.Game.Events;
 using Assets.Code.Item.Events;
 using Assets.Code.Rules;
 using Assets.Code.Quirk;
-using System.Runtime.Remoting.Messaging;
+using Assets.Code.Campaign.Events;
+using UnityEngine.UI;
+using UnityEngine.Playables;
+using System.Linq;
 
 namespace DD2
 {
     // 一般游戏设定功能
     public class HookGenerals : IHook
     {
-        public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
-        public static readonly TextBasedEditorPrefsBoolType RANDOM_INIT_QUIRKS = new TextBasedEditorPrefsBoolType("RANDOM_INIT_QUIRKS".ToLowerInvariant(), false, "Reset seeds when generate init quirks.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
-        public static readonly TextBasedEditorPrefsIntType INSTANCES_PER_CLASS = new TextBasedEditorPrefsIntType("INSTANCES_PER_CLASS".ToLowerInvariant(), 1, "Can have multi-instances per class in roster.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
+        const string PluginGroupName = "_PLUGIN_BINARIZER_";
+        public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills at beginning.", PluginGroupName, true);
+        public static readonly TextBasedEditorPrefsBoolType RANDOM_INIT_QUIRKS = new TextBasedEditorPrefsBoolType("RANDOM_INIT_QUIRKS".ToLowerInvariant(), false, "Reset seeds when generate quirks.", PluginGroupName, true);
+        public static readonly TextBasedEditorPrefsIntType INSTANCES_PER_CLASS = new TextBasedEditorPrefsIntType("INSTANCES_PER_CLASS".ToLowerInvariant(), 1, "Can select more than one hero per class.", PluginGroupName, true);
+        public static readonly TextBasedEditorPrefsBoolType ALLOW_ABSENT = new TextBasedEditorPrefsBoolType("ALLOW_ABSENT".ToLowerInvariant(), false, "Skip 4-member checks; team will not fill at inns.", PluginGroupName, true);
 
         public IEnumerable<Type> GetRegisterTypes()
         {
@@ -433,14 +438,18 @@ namespace DD2
         [HarmonyPrefix, HarmonyPatch(typeof(HeroSelectBhv), "Init")]
         public static bool MultipleClassActors(ref HeroSelectBhv __instance)
         {
+            var t = new Traverse(__instance);
+            var confirmButton = t.Field("m_ConfirmButton").GetValue<Button>();
+            confirmButton.gameObject.SetActive(false);
+
             int instancesPerClass = TextBasedEditorPrefs.GetInt(INSTANCES_PER_CLASS);
             if (instancesPerClass <= 1)
                 return true;
 
             if (heroSelectBhv == null)
             {
-                var t = new Traverse(__instance).Field("m_HeroSelectContainer").GetValue<Transform>();
-                containerInitPos = t.localPosition;
+                var container = t.Field("m_HeroSelectContainer").GetValue<Transform>();
+                containerInitPos = container.localPosition;
             }
             heroSelectBhv = __instance;
 
@@ -536,5 +545,79 @@ namespace DD2
             }
             return false;
         }
+
+        /// <summary>
+        /// 可单人出门：条件
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(HeroSelectBhv), "CheckToSetConfirmButtonActive")]
+        public static bool DontNeedFullParty(HeroSelectBhv __instance)
+        {
+            if (!TextBasedEditorPrefs.GetBool(ALLOW_ABSENT))
+                return true;
+
+            var t = new Traverse(__instance);
+            var selectedActorGuids = t.Field("m_SelectedActorGuids").GetValue<List<uint>>();
+            var confirmButton = t.Field("m_ConfirmButton").GetValue<Button>();
+            var confirmDirector = t.Field("m_confirmDirector").GetValue<PlayableDirector>();
+            var confirmBtnAppearTimeline = t.Field("m_confirmBtnAppearTimeline").GetValue<PlayableAsset>();
+            bool canConfirm = selectedActorGuids.Any(i => i > 0u);
+            if (!canConfirm)
+            {
+                confirmButton.gameObject.SetActive(false);
+                EventHeroSelectConfirmStateChanged.Trigger(false, selectedActorGuids);
+                return false;
+            }
+            bool activeInHierarchy = confirmButton.gameObject.activeInHierarchy;
+            confirmButton.gameObject.SetActive(true);
+            if (!activeInHierarchy)
+            {
+                confirmDirector.Play(confirmBtnAppearTimeline);
+            }
+            EventHeroSelectConfirmStateChanged.Trigger(true, selectedActorGuids);
+            return false;
+        }
+        /// <summary>
+        /// 可单人出门：确认后
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(HeroSelectBhv), "ConfirmRosterSelection")]
+        public static bool DontNeedFullParty2(HeroSelectBhv __instance)
+        {
+            if (!TextBasedEditorPrefs.GetBool(ALLOW_ABSENT))
+                return true;
+
+            var t = new Traverse(__instance);
+            var selectedActorGuids = t.Field("m_SelectedActorGuids").GetValue<List<uint>>();
+            bool canConfirm = selectedActorGuids.Any(i => i > 0u);
+            if (canConfirm)
+                selectedActorGuids.RemoveAll(i => i == 0u);
+            return true;
+        }
+        static int savedFillAmount = -1;
+        /// <summary>
+        /// 可单人出门：旅馆不加人
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(Roster), "OnGameModeEnterPreStart")]
+        public static bool DontNeedFullParty3(ref Roster __instance)
+        {
+            var tRules = new Traverse(RulesManager.GetRules<CampaignRules>());
+            if (!TextBasedEditorPrefs.GetBool(ALLOW_ABSENT))
+            {
+                if (savedFillAmount >= 0)
+                {
+                    tRules.Field("m_RosterReserveFillAmount").SetValue(savedFillAmount);
+                    savedFillAmount = -1;
+                }
+            }
+            else
+            {
+                if (savedFillAmount < 0)
+                {
+                    savedFillAmount = tRules.Field("m_RosterReserveFillAmount").GetValue<int>();
+                    tRules.Field("m_RosterReserveFillAmount").SetValue(0);
+                }
+            }
+            return true;
+        }
+
     }
 }
