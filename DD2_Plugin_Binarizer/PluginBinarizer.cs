@@ -5,7 +5,7 @@ using BepInEx;
 
 namespace DD2
 {
-    [BepInPlugin("binarizer.plugin.dd2.function_sets", "功能合集 by Binarizer", "1.1")]
+    [BepInPlugin("binarizer.plugin.dd2.function_sets", "功能合集 by Binarizer", "1.2")]
     public class PluginBinarizer : BaseUnityPlugin
     {
         void RegisterHook(IHook hook)
@@ -19,18 +19,18 @@ namespace DD2
 
         void Awake()
         {
-            Console.WriteLine("美好的初始化开始");
+            Console.WriteLine("Main Awake: Initialize Hooks");
             RegisterHook(new HookGenerals());
         }
 
         void Start()
         {
-            Console.WriteLine("美好的第一帧开始");
+            Console.WriteLine("Main Start: ");
         }
 
         void Update()
         {
-            Console.WriteLine("美好的帧循环开始");
+            Console.WriteLine("Main Update: ");
             foreach (IHook hook in hooks)
             {
                 hook.OnUpdate();

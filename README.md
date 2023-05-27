@@ -2,13 +2,15 @@
 Darkest Dungeon II mod plugin
 
 # Feature list
-1. Unlock all skills at the beginning
-2. Regenerate seed when creating new heros (random quirks)
+1. Unlock all skills at the beginning (editor option)
+2. Regenerate seed when creating new heros (editor option)
 3. Can replace paths (unlocked) in character sheet (keyboard space)
 4. Can replace heros (reserved) in character sheet (keyboard alt+space)
 5. Can right click torch to decrease 15 light value (either combat or coach)
-6. Press F3 to quick save. You can load it in main menu (continue) while holding alt.
-7. Can force lock/remove quirks in hospital(hold alt to remove, shift to lock)
+6. Press F3 to quick save. Hold Alt and click continue journey to read it.
+7. Can force lock/remove quirks in hospital (alt=remove, shift=lock)
+8. Can lock more quirks in hospital (price doubles each time)
+9. Can choose more than one actor per class in roster (editor option)
 
 # How to compile
 1. install DD2 game (e.g. steam version) and copy absolute game paths.

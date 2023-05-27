@@ -23,6 +23,7 @@ using Assets.Code.Game.Events;
 using Assets.Code.Item.Events;
 using Assets.Code.Rules;
 using Assets.Code.Quirk;
+using System.Runtime.Remoting.Messaging;
 
 namespace DD2
 {
@@ -31,6 +32,7 @@ namespace DD2
     {
         public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
         public static readonly TextBasedEditorPrefsBoolType RANDOM_INIT_QUIRKS = new TextBasedEditorPrefsBoolType("RANDOM_INIT_QUIRKS".ToLowerInvariant(), false, "Reset seeds when generate init quirks.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
+        public static readonly TextBasedEditorPrefsIntType INSTANCES_PER_CLASS = new TextBasedEditorPrefsIntType("INSTANCES_PER_CLASS".ToLowerInvariant(), 1, "Can have multi-instances per class in roster.", TextBasedEditorPrefsBaseType.BOOLS_GROUP, true);
 
         public IEnumerable<Type> GetRegisterTypes()
         {
@@ -139,13 +141,11 @@ namespace DD2
             {
                 ActorInstance actor = SingletonMonoBehaviour<Library<uint, ActorInstance>>.Instance.GetLibraryElement(characterSheetUiBhv.ActorGuid);
                 List<ActorDataPath> actorDataPaths = ActorPathCalculation.GetActorDataPaths(actor.ActorDataClass);
-                System.Console.WriteLine($"actorDataPaths={actorDataPaths.Count}");
                 for (int i = 0; i < actorDataPaths.Count; i++)
                 {
                     if (actor.ActorDataPath.Id == actorDataPaths[i].Id)
                     {
                         actor.SetActorPath(actorDataPaths[(i + 1) % actorDataPaths.Count]);
-                        System.Console.WriteLine($"setPath={actor.ActorDataPath.GetKey()}");
                         break;
                     }
                 }
@@ -222,6 +222,19 @@ namespace DD2
             if (Keyboard.current.f3Key.wasPressedThisFrame)
             {
                 CopyCurrentSaveToQuickSave();
+            }
+
+            // 滚动选人槽
+            if (TextBasedEditorPrefs.GetInt(INSTANCES_PER_CLASS) > 1 && GameModeMgr.CurrentMode == GameModeType.HERO_SELECT && heroSelectBhv)
+            {
+                float roll = Mouse.current.scroll.ReadValue().y;
+                if (roll != 0.0f)
+                {
+                    Transform tContainer = new Traverse(heroSelectBhv).Field("m_HeroSelectContainer").GetValue<Transform>();
+                    tContainer.localPosition += new Vector3(145f * Mathf.Sign(roll), 0, 0);
+                    if (tContainer.localPosition.x > containerInitPos.x)
+                        tContainer.localPosition = containerInitPos;
+                }
             }
         }
 
@@ -349,7 +362,178 @@ namespace DD2
                 t.Method("UpdateValues").GetValue();
                 EventUpdatePlayerCurrency.Trigger();
             }
-            
+
+            return false;
+        }
+
+        static int lockedQuirks = 0;
+
+        /// <summary>
+        /// 医院可锁多个怪癖1: 重写判定函数
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(HospitalScreenBhv), "HandleOnClickedQuirkToggle")]
+        public static bool LockMoreQuirks(HospitalScreenBhv __instance, RectTransform clickedTransform)
+        {
+            var t = new Traverse(__instance);
+            var lockableQuirks = t.Field("m_lockableQuirks").GetValue<List<QuirkInstance>>();
+            var removableQuirks = t.Field("m_removableQuirks").GetValue<List<QuirkInstance>>();
+            var lockableParent = t.Field("m_lockableQuirksParent").GetValue<Transform>();
+            var removableParent = t.Field("m_removableQuirksParent").GetValue<Transform>();
+            var selectedQuirkPointer = t.Field("m_selectedQuirkPointer").GetValue<RectTransform>();
+            int siblingIndex = clickedTransform.GetSiblingIndex();
+            lockedQuirks = 0;
+            if (clickedTransform.parent == lockableParent)
+            {
+                for (int i = 0; i < lockableQuirks.Count; i++)
+                {
+                    var quirkInstance = lockableQuirks[i];
+                    if (quirkInstance.IsLocked())
+                    {
+                        if (siblingIndex == i)
+                            return false;
+                        lockedQuirks++;
+                    }
+                }
+                t.Field("m_selectedQuirkToTreat").SetValue(lockableQuirks[siblingIndex]);
+            }
+            else
+            {
+                if (!(clickedTransform.parent == removableParent))
+                {
+                    return false;
+                }
+                t.Field("m_selectedQuirkToTreat").SetValue(removableQuirks[siblingIndex]);
+            }
+            selectedQuirkPointer.gameObject.SetActive(true);
+            if (selectedQuirkPointer.parent != clickedTransform)
+            {
+                selectedQuirkPointer.SetParent(clickedTransform);
+                SingletonMonoBehaviour<AudioMgr>.Instance.Play(AudioPathsBhv.MinorClick, 8, null);
+            }
+            selectedQuirkPointer.anchoredPosition = t.Field("m_quirkPointerAnchoredPosition").GetValue<Vector2>();
+            t.Method("UpdateTreatQuirksButton").GetValue();
+            return false;
+        }
+
+        /// <summary>
+        /// 医院可锁多个怪癖2: 若锁多个，则价格加倍
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(HospitalScreenBhv), "CalculateActiveCost")]
+        public static void LockMoreQuirksCostPow(ref int __result)
+        {
+            __result <<= lockedQuirks;
+        }
+
+        private static HeroSelectBhv heroSelectBhv = null;
+        private static Vector3 containerInitPos = Vector3.zero;
+
+        /// <summary>
+        /// 职业可重复选择：选人菜单加人
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(HeroSelectBhv), "Init")]
+        public static bool MultipleClassActors(ref HeroSelectBhv __instance)
+        {
+            int instancesPerClass = TextBasedEditorPrefs.GetInt(INSTANCES_PER_CLASS);
+            if (instancesPerClass <= 1)
+                return true;
+
+            if (heroSelectBhv == null)
+            {
+                var t = new Traverse(__instance).Field("m_HeroSelectContainer").GetValue<Transform>();
+                containerInitPos = t.localPosition;
+            }
+            heroSelectBhv = __instance;
+
+            Roster roster = SingletonMonoBehaviour<CampaignBhv>.Instance.Roster;
+            Traverse tRoster = new Traverse(roster);
+            var entries = tRoster.Field("m_Entries").GetValue<List<RosterEntry>>();
+            var resourceActors = tRoster.Field("m_ActorResourceDatabase").GetValue<ResourceDatabaseActors>();
+            List<ResourceActor> list = new List<ResourceActor>();
+            for (int i = 0; i < resourceActors.GetNumberOfResources(); i++)
+            {
+                ResourceActor actorResource = resourceActors.GetResourceAtIndex(i);
+                if (actorResource != null && actorResource.GetPopulateInRoster())
+                {
+                    ActorDataClass libraryElement = SingletonMonoBehaviour<Library<string, ActorDataClass>>.Instance.GetLibraryElement(actorResource.name);
+                    if (libraryElement != null && libraryElement.GetIsUnlocked())
+                    {
+                        list.Add(actorResource);
+                    }
+                }
+            }
+            list.Sort((a, b) => a.RosterOrderPriority - b.RosterOrderPriority);
+            for (int i = 1; i < instancesPerClass; ++i)
+            {
+                foreach (var resourceActor in list)
+                {
+                    uint guid = LibraryActors.LibraryActorsInstance.CreateActor(resourceActor, null, null);
+                    RosterEntry rosterEntry = new RosterEntry(resourceActor.name, guid);
+                    entries.Add(rosterEntry);
+                    rosterEntry.SetRosterStatus(resourceActor.StartingRosterStatusType, 0u);
+                    SingletonMonoBehaviour<Library<uint, ActorInstance>>.Instance.GetLibraryElement(guid).OnAddedToRoster();
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 职业可重复选择：不检测重复Class
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(Roster), "RemoveInvalidRosterEntries")]
+        public static bool SkipCheckDuplicate(ref Roster __instance)
+        {
+            int instancesPerClass = TextBasedEditorPrefs.GetInt(INSTANCES_PER_CLASS);
+            if (instancesPerClass <= 1)
+                return true;
+
+            Traverse tRoster = new Traverse(__instance);
+            var entries = tRoster.Field("m_Entries").GetValue<List<RosterEntry>>();
+            List<uint> invalidRosterEntryActorGuids = new List<uint>();
+            int count = entries.Count;
+            for (int i = 0; i < count; i++)
+            {
+                RosterEntry entry = entries[i];
+                bool valid = true;
+                if (!SingletonMonoBehaviour<Library<uint, ActorInstance>>.Instance.GetHasLibraryKey(entry.m_ActorGuid))
+                {
+                    valid = false;
+                }
+                ActorDataClass libraryElement = SingletonMonoBehaviour<Library<string, ActorDataClass>>.Instance.GetLibraryElement(entry.m_ActorClassId);
+                if (libraryElement != null)
+                {
+                    if (libraryElement.m_DeathChainIds.Count > 0 || libraryElement.m_DeathChainLootIds.Count > 0)
+                    {
+                        valid = false;
+                    }
+                    if (libraryElement.QuirkContainerDefinition == null)
+                    {
+                        valid = false;
+                    }
+                    if (libraryElement.ActorDataStats.StatContainer.GetHasStat(ActorStatType.STRESS_MAX))
+                    {
+                        if (libraryElement.Overstresses.Count == 0)
+                        {
+                            valid = false;
+                        }
+                    }
+                    else if (libraryElement.Overstresses.Count > 0)
+                    {
+                        valid = false;
+                    }
+                }
+                else
+                {
+                    valid = false;
+                }
+                if (!valid)
+                {
+                    invalidRosterEntryActorGuids.Add(entry.m_ActorGuid);
+                }
+            }
+            if (invalidRosterEntryActorGuids.Count > 0)
+            {
+                entries.RemoveAll((RosterEntry rosterEntry) => invalidRosterEntryActorGuids.Contains(rosterEntry.m_ActorGuid));
+            }
             return false;
         }
     }
