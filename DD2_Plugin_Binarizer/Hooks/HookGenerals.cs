@@ -1,38 +1,42 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Playables;
+using UnityEngine.UI;
 using HarmonyLib;
 using BepInEx;
+using BepInEx.Configuration;
 using Assets.Code.Utils;
+using Assets.Code.Utils.Serialization;
+using Assets.Code.Skill;
 using Assets.Code.Profile;
 using Assets.Code.Inputs;
 using Assets.Code.Campaign;
-using Assets.Code.UI.Widgets;
+using Assets.Code.Campaign.Events;
 using Assets.Code.Actor;
 using Assets.Code.Library;
 using Assets.Code.Run;
 using Assets.Code.Source;
 using Assets.Code.Game;
-using Assets.Code.UI.Managers;
-using Assets.Code.Utils.Serialization;
-using Assets.Code.Audio;
-using Assets.Code.UI.Screens;
 using Assets.Code.Game.Events;
+using Assets.Code.Audio;
 using Assets.Code.Item.Events;
 using Assets.Code.Rules;
 using Assets.Code.Quirk;
-using Assets.Code.Campaign.Events;
-using UnityEngine.UI;
-using UnityEngine.Playables;
-using System.Linq;
+using Assets.Code.UI.Widgets;
+using Assets.Code.UI.Screens;
+using Assets.Code.UI.Managers;
 
 namespace DD2
 {
     // 一般游戏设定功能
     public class HookGenerals : IHook
     {
+        private static ConfigEntry<bool> forceEnableEditorPrefs;
+
         const string PluginGroupName = "_PLUGIN_BINARIZER_";
         public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills at beginning.", PluginGroupName, true);
         public static readonly TextBasedEditorPrefsBoolType RANDOM_INIT_QUIRKS = new TextBasedEditorPrefsBoolType("RANDOM_INIT_QUIRKS".ToLowerInvariant(), false, "Reset seeds when generate quirks.", PluginGroupName, true);
@@ -45,6 +49,7 @@ namespace DD2
         }
         public void OnRegister(BaseUnityPlugin plugin)
         {
+            forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", false, "Force -enableEditorPrefs, no need to set command line args.");
         }
 
         public void OnUpdate()
@@ -52,9 +57,26 @@ namespace DD2
         }
 
         /// <summary>
+        /// 默认开启EditorPrefs
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(CommandLineUtils), "IsEditorPrefsEnabled")]
+        public static bool ForceEnableEditorPrefs(ref bool __result)
+        {
+            if (forceEnableEditorPrefs.Value)
+            {
+                __result = true;
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
         /// 解锁全技能
         /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(Assets.Code.Skill.SkillInstance), "GetIsUnlocked")]
+        [HarmonyPrefix, HarmonyPatch(typeof(SkillInstance), "GetIsUnlocked")]
         public static bool UnlockAllSkills(ref bool __result)
         {
             __result = TextBasedEditorPrefs.GetBool(UNLOCK_ALL_SKILLS);
@@ -64,8 +86,8 @@ namespace DD2
         /// <summary>
         /// 初始随机怪癖：功能
         /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(Assets.Code.Quirk.QuirkContainer), "GenerateInitialQuirks")]
-        public static bool RandomQuirkSeed(ref Assets.Code.Quirk.QuirkContainer __instance)
+        [HarmonyPrefix, HarmonyPatch(typeof(QuirkContainer), "GenerateInitialQuirks")]
+        public static bool RandomQuirkSeed(ref QuirkContainer __instance)
         {
             ProfileSeedInstance profileSeedInstance = SingletonMonoBehaviour<ProfileBhv>.Instance.GetCurrentProfile().GetProfileSeedInstance(__instance.ActorInstance.ActorDataId);
             if (TextBasedEditorPrefs.GetBool(RANDOM_INIT_QUIRKS))
