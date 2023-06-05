@@ -29,6 +29,9 @@ using Assets.Code.Quirk;
 using Assets.Code.UI.Widgets;
 using Assets.Code.UI.Screens;
 using Assets.Code.UI.Managers;
+using Assets.Code.Inn.Presentation;
+using Assets.Code.Item;
+using Assets.Code.Resource;
 
 namespace DD2
 {
@@ -42,6 +45,8 @@ namespace DD2
         public static readonly TextBasedEditorPrefsBoolType RANDOM_INIT_QUIRKS = new TextBasedEditorPrefsBoolType("RANDOM_INIT_QUIRKS".ToLowerInvariant(), false, "Reset seeds when generate quirks.", PluginGroupName, true);
         public static readonly TextBasedEditorPrefsIntType INSTANCES_PER_CLASS = new TextBasedEditorPrefsIntType("INSTANCES_PER_CLASS".ToLowerInvariant(), 1, "Can select more than one hero per class.", PluginGroupName, true);
         public static readonly TextBasedEditorPrefsBoolType ALLOW_ABSENT = new TextBasedEditorPrefsBoolType("ALLOW_ABSENT".ToLowerInvariant(), false, "Skip 4-member checks; team will not fill at inns.", PluginGroupName, true);
+        public static readonly TextBasedEditorPrefsIntType BIOME_COUNT_BIAS = new TextBasedEditorPrefsIntType("BIOME_COUNT_BIAS".ToLowerInvariant(), 0, "Modify biome count bias.", PluginGroupName, true);
+        public static readonly TextBasedEditorPrefsBoolType BIOME_ALWAYS_EMBARK = new TextBasedEditorPrefsBoolType("BIOME_ALWAYS_EMBARK".ToLowerInvariant(), false, "Can always enter next biome.", PluginGroupName, true);
 
         public IEnumerable<Type> GetRegisterTypes()
         {
@@ -54,6 +59,52 @@ namespace DD2
 
         public void OnUpdate()
         {
+        }
+
+        /// <summary>
+        /// multi-mods simple support
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(ResourceGroupCsvDatabase), "GatherResources")]
+        public static bool ModSupport(ref ResourceGroupCsvDatabase __instance)
+        {
+            string modRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
+            if (!Directory.Exists(modRootPath))
+                return true;
+
+            string modOrderFile = Path.Combine(modRootPath, "ModOrder.txt");
+            List<string> modOrder;
+            if (File.Exists(modOrderFile))
+            {
+                modOrder = File.ReadLines(modOrderFile).ToList();
+            }
+            else
+            {
+                modOrder = new List<string>();
+                var modDirs = Directory.GetDirectories(modRootPath);
+                foreach (var dir in modDirs)
+                {
+                    modOrder.Add(Path.GetFileNameWithoutExtension(dir));
+                }
+            }
+            modOrder.Reverse();
+
+            foreach (string modName in modOrder)
+            {
+                if (string.IsNullOrEmpty(modName)) continue;
+                string modPath = Path.Combine(modRootPath, modName);
+                var modFolder = AccessTools.CreateInstance(typeof(ResourceTextFolder));
+                var privateCtor = AccessTools.Constructor(typeof(ResourceTextFolder), new Type[] { typeof(string), typeof(string) });
+                privateCtor?.Invoke(modFolder, new object[] { modName.ToLowerInvariant(), Path.Combine(modPath, "Excel") });
+            }
+
+            var folders = CustomEnum<ResourceTextFolder>.GetInstances() as List<ResourceTextFolder>;
+            folders.Reverse();  // let game defaults be the lowest priority
+            System.Console.WriteLine("mod order:");
+            foreach (var textFolder in folders)
+            {
+                System.Console.WriteLine(textFolder.GetName());
+            }
+            return true;
         }
 
         /// <summary>
@@ -480,22 +531,28 @@ namespace DD2
             var entries = tRoster.Field("m_Entries").GetValue<List<RosterEntry>>();
             var resourceActors = tRoster.Field("m_ActorResourceDatabase").GetValue<ResourceDatabaseActors>();
             List<ResourceActor> list = new List<ResourceActor>();
+            List<int> counts = new List<int>();
             for (int i = 0; i < resourceActors.GetNumberOfResources(); i++)
             {
                 ResourceActor actorResource = resourceActors.GetResourceAtIndex(i);
-                if (actorResource != null && actorResource.GetPopulateInRoster())
+                int added = entries.Count(entry => entry.ActorClassId == actorResource.name);
+                System.Console.WriteLine($"Try add class {actorResource.name}, statue={actorResource.StartingRosterStatusType}, populate={actorResource.GetPopulateInRoster()}, added={added}");
+                if (actorResource != null && actorResource.GetPopulateInRoster() && added < instancesPerClass)
                 {
                     ActorDataClass libraryElement = SingletonMonoBehaviour<Library<string, ActorDataClass>>.Instance.GetLibraryElement(actorResource.name);
                     if (libraryElement != null && libraryElement.GetIsUnlocked())
                     {
                         list.Add(actorResource);
+                        counts.Add(instancesPerClass - added);
                     }
                 }
             }
             list.Sort((a, b) => a.RosterOrderPriority - b.RosterOrderPriority);
-            for (int i = 1; i < instancesPerClass; ++i)
+            for (int i = 0; i < list.Count; i++)
             {
-                foreach (var resourceActor in list)
+                ResourceActor resourceActor = list[i];
+                int addCount = counts[i];
+                for (int j = 0; j < addCount; ++j)
                 {
                     uint guid = LibraryActors.LibraryActorsInstance.CreateActor(resourceActor, null, null);
                     RosterEntry rosterEntry = new RosterEntry(resourceActor.name, guid);
@@ -641,5 +698,32 @@ namespace DD2
             return true;
         }
 
+        /// <summary>
+        /// 更改地牢区域数
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(RunManager), "GetRunNumberOfTypicalBiomes")]
+        public static void ModifyBiomeCountBias(ref int __result)
+        {
+            __result += TextBasedEditorPrefs.GetInt(BIOME_COUNT_BIAS);
+        }
+
+        /// <summary>
+        /// 总是能打boss 1
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(InnPresentationBhv), "GetCanEmbarkNextBiome")]
+        public static void AlwaysCanEmbark1(ref bool __result)
+        {
+            __result |= TextBasedEditorPrefs.GetBool(BIOME_ALWAYS_EMBARK);
+        }
+
+        /// <summary>
+        /// 总是能打boss 2
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(RunBhv), "GetEndBiomeRequiredStageCoachItemSlotType")]
+        public static void AlwaysCanEmbark2(ref ItemSlotType __result)
+        {
+            if (TextBasedEditorPrefs.GetBool(BIOME_ALWAYS_EMBARK))
+                __result = null;
+        }
     }
 }
