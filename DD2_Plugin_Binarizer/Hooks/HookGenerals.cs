@@ -32,6 +32,8 @@ using Assets.Code.UI.Managers;
 using Assets.Code.Inn.Presentation;
 using Assets.Code.Item;
 using Assets.Code.Resource;
+using Assets.Code.Locale;
+using Assets.Code.Locale.Sources;
 
 namespace DD2
 {
@@ -52,9 +54,33 @@ namespace DD2
         {
             return new Type[] { GetType() };
         }
+
+        readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
+        static List<string> ModNames = new List<string>();
+        readonly static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
+
         public void OnRegister(BaseUnityPlugin plugin)
-        {
+        {       
             forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", false, "Force -enableEditorPrefs, no need to set command line args.");
+
+            // Mod support: prepare directories
+            if (Directory.Exists(ModRootPath))
+            {
+                string modOrderFile = Path.Combine(ModRootPath, "ModOrder.txt");
+                if (File.Exists(modOrderFile))
+                {
+                    ModNames = File.ReadLines(modOrderFile).ToList();
+                }
+                else
+                {
+                    ModNames = new List<string>();
+                    var modDirs = Directory.GetDirectories(ModRootPath);
+                    foreach (var dir in modDirs)
+                    {
+                        ModNames.Add(Path.GetFileNameWithoutExtension(dir));
+                    }
+                }
+            }
         }
 
         public void OnUpdate()
@@ -67,34 +93,28 @@ namespace DD2
         [HarmonyPrefix, HarmonyPatch(typeof(ResourceGroupCsvDatabase), "GatherResources")]
         public static bool ModSupport(ref ResourceGroupCsvDatabase __instance)
         {
-            string modRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
-            if (!Directory.Exists(modRootPath))
-                return true;
+            ModNames.Reverse();  // let game defaults be the lowest priority
 
-            string modOrderFile = Path.Combine(modRootPath, "ModOrder.txt");
-            List<string> modOrder;
-            if (File.Exists(modOrderFile))
-            {
-                modOrder = File.ReadLines(modOrderFile).ToList();
-            }
-            else
-            {
-                modOrder = new List<string>();
-                var modDirs = Directory.GetDirectories(modRootPath);
-                foreach (var dir in modDirs)
-                {
-                    modOrder.Add(Path.GetFileNameWithoutExtension(dir));
-                }
-            }
-            modOrder.Reverse();
-
-            foreach (string modName in modOrder)
+            foreach (string modName in ModNames)
             {
                 if (string.IsNullOrEmpty(modName)) continue;
-                string modPath = Path.Combine(modRootPath, modName);
+                string modPath = Path.Combine(ModRootPath, modName);
                 var modFolder = AccessTools.CreateInstance(typeof(ResourceTextFolder));
                 var privateCtor = AccessTools.Constructor(typeof(ResourceTextFolder), new Type[] { typeof(string), typeof(string) });
                 privateCtor?.Invoke(modFolder, new object[] { modName.ToLowerInvariant(), Path.Combine(modPath, "Excel") });
+
+                // 加一下UI Sprites
+                var spriteDir = Path.Combine(modPath, "Sprites");
+                if (Directory.Exists(spriteDir))
+                {
+                    string[] sprites = Directory.GetFiles(spriteDir, "*.png");
+                    foreach (var spritePath in sprites)
+                    {
+                        var sprite = CreateSpriteFromPath(spritePath);
+                        ExternalSprites.Add(Path.GetFileNameWithoutExtension(spritePath), sprite);
+                        System.Console.WriteLine("Load Sprite: " + sprite.name);
+                    }
+                }
             }
 
             var folders = CustomEnum<ResourceTextFolder>.GetInstances() as List<ResourceTextFolder>;
@@ -105,6 +125,148 @@ namespace DD2
                 System.Console.WriteLine(textFolder.GetName());
             }
             return true;
+        }
+
+        /// <summary>
+        /// 向LocTable添加新字段
+        /// </summary>
+        static void AddLocText(List<KeyValuePair<string, string[]>> strings, string key, string text)
+        {
+            Comparer<KeyValuePair<string, string[]>> comparer = Comparer<KeyValuePair<string, string[]>>.Create((KeyValuePair<string, string[]> a, KeyValuePair<string, string[]> b) => a.Key.CompareTo(b.Key));
+            KeyValuePair<string, string[]> item = new KeyValuePair<string, string[]>(key, null);
+            int num = strings.BinarySearch(0, strings.Count, item, comparer);
+            if (num >= 0)
+            {
+                string[] value = strings[num].Value;
+                ArrayUtils.Append(ref value, text);
+                strings[num] = new KeyValuePair<string, string[]>(key, value);
+            }
+            else
+            {
+                int index = ~num;
+                strings.Insert(index, new KeyValuePair<string, string[]>(key, new string[] { text }));
+            }
+        }
+
+        /// <summary>
+        /// 读取Localization English
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(EnglishLocalizationData), "TryPopulateStrings")]
+        public static void LodModEnglishLocales(ref EnglishLocalizationData __instance)
+        {
+            Traverse t = new Traverse(__instance);
+            var m_strings = t.Field("m_strings").GetValue<List<KeyValuePair<string, string[]>>>();
+            var m_stringIndices = t.Field("m_stringIndices").GetValue<Dictionary<string, int>>();
+            foreach (string modName in ModNames)
+            {
+                if (string.IsNullOrEmpty(modName)) continue;
+                string modLocalePath = Path.Combine(ModRootPath, modName, "Localization/Sources/");
+                if (new TextFileSource(modLocalePath).TryGetData(out LocalizedString[] array) != LocalizationSourceStatus.Ready)
+                {
+                    System.Console.WriteLine($"EnglishLocalizationData status was not found in mod {modName}.");
+                    continue;
+                }
+                foreach (LocalizedString localizedString in array)
+                {
+                    AddLocText(m_strings, localizedString.LocKey, localizedString.Text);
+                }
+            }
+            m_stringIndices.Clear();
+            for (int j = 0; j < m_strings.Count; j++)
+            {
+                m_stringIndices.Add(m_strings[j].Key, j);
+            }
+        }
+
+        /// <summary>
+        /// 读取Localization Foreign
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(ForeignLocalizationData), "TryPopulateStrings")]
+        public static void LodModForeignLocales(ref ForeignLocalizationData __instance, string path)
+        {
+            Traverse t = new Traverse(__instance);
+            var m_strings = t.Field("m_strings").GetValue<List<KeyValuePair<string, string[]>>>();
+            var m_stringIndices = t.Field("m_stringIndices").GetValue<Dictionary<string, int>>();
+            foreach (string modName in ModNames)
+            {
+                if (string.IsNullOrEmpty(modName) || string.IsNullOrEmpty(path)) continue;
+                string modPoFilePath = Path.Combine(ModRootPath, modName, "Localization/Poedit/" + Path.GetFileName(path));
+                if (!File.Exists(modPoFilePath))
+                    continue;
+                PoFile poFile = PoFile.Load(modPoFilePath);
+                if (poFile == null)
+                {
+                    System.Console.WriteLine($"Couldn't load PoFile at \"{modPoFilePath}\".");
+                    continue;
+                }
+                foreach (PoFile.LocalizationData localizationData in poFile.Data)
+                {
+                    AddLocText(m_strings, localizationData.msgctxt, localizationData.msgstr);
+                }
+            }
+            m_stringIndices.Clear();
+            for (int j = 0; j < m_strings.Count; j++)
+            {
+                m_stringIndices.Add(m_strings[j].Key, j);
+            }
+        }
+
+        /// <summary>
+        /// 读取ResourceActor字段
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(ActorDataClass), MethodType.Constructor, new Type[]{ typeof(string), typeof(string)})]
+        public static void RedirectResourceActor(string parseId, string csvText)
+        {
+            System.Console.WriteLine($"ActorClass key={parseId}");
+            var resourceActor = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors.GetResource(parseId);
+            if (resourceActor != null)
+            {
+                Traverse tResActor = new Traverse(resourceActor);
+                var fields = tResActor.Fields();
+                string[] lines = csvText.SplitLines();
+                foreach (var line in lines)
+                {
+                    string[] array = line.Split(new char[] { ','}, StringSplitOptions.RemoveEmptyEntries);
+                    string key = array[0];
+                    if (fields.Contains(key))
+                    {
+                        var field = tResActor.Field(key);
+                        Type fieldType = field.GetValueType();
+                        System.Console.WriteLine($"{array[0]}=({fieldType.Name}){array[1]}");
+                        if (fieldType == typeof(bool))
+                        {
+                            field.SetValue(Boolean.Parse(array[1]));
+                        }
+                        else if (fieldType == typeof(string))
+                        {
+                            field.SetValue(array[1]);
+                        }
+                        else if (fieldType == typeof(int))
+                        {
+                            field.SetValue(int.Parse(array[1]));
+                        }
+                        else if (fieldType == typeof(float))
+                        {
+                            field.SetValue(float.Parse(array[1]));
+                        }
+                        else if (fieldType == typeof(SelectionRosterStatusType))
+                        {
+                            field.Method("SetSelection", RosterStatusType.Cast(array[1])).GetValue();
+                        }
+                        else if (fieldType == typeof(Sprite))
+                        {
+                            if (ExternalSprites.ContainsKey(array[1]))
+                            {
+                                field.SetValue(ExternalSprites[array[1]]);
+                            }
+                            else
+                            {
+                                System.Console.WriteLine($"{array[1]} sprite not found!");
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -271,6 +433,8 @@ namespace DD2
         [HarmonyPostfix, HarmonyPatch(typeof(InputSystemBhv), "Update")]
         public static void InputHack(ref InputSystemBhv __instance)
         {
+            if (Traverse.Create(__instance).Field("m_inputSource").GetValue() == null)
+                return;
             if (__instance.GetPointerValues().m_rightButton.m_wasPressed)
             {
                 System.Console.WriteLine("Mouse Right!");
@@ -350,6 +514,38 @@ namespace DD2
                     CopyDirectory(subDir.FullName, newDestinationDir, true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Unity Create Sprite
+        /// </summary>
+        public static Sprite CreateSpriteFromPath(string FilePath, float PixelsPerUnit = 100.0f)
+        {
+            System.Console.WriteLine($"Sprite FilePath={FilePath}, Exist={File.Exists(FilePath)}");
+            Texture2D SpriteTexture = LoadTexture(FilePath);
+            System.Console.WriteLine($"SpriteTexture={SpriteTexture.name}");
+            Sprite NewSprite = Sprite.Create(SpriteTexture, new Rect(0, 0, SpriteTexture.width, SpriteTexture.height), new Vector2(0, 0), PixelsPerUnit);
+            return NewSprite;
+        }
+
+        /// <summary>
+        /// Unity Load Tex2D
+        /// </summary>
+        public static Texture2D LoadTexture(string FilePath)
+        {
+            Texture2D Tex2D;
+            byte[] FileData;
+
+            if (File.Exists(FilePath))
+            {
+                Tex2D = new Texture2D(32, 32);
+                FileData = File.ReadAllBytes(FilePath);
+                System.Console.WriteLine($"ReadData length={FileData?.Length}");
+                System.Console.WriteLine($"Tex2D={Tex2D.name}");
+                if (Tex2D.LoadImage(FileData))
+                    return Tex2D;
+            }
+            return null;
         }
 
         /// <summary>
