@@ -75,6 +75,10 @@
     <Reference Include="System.Transactions" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="Unity.Addressables">
+      <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\Unity.Addressables.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.InputSystem">
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\Unity.InputSystem.dll</HintPath>
       <Private>False</Private>
@@ -291,6 +295,7 @@
   <ItemGroup>
     <Compile Include="Hooks\IHook.cs" />
     <Compile Include="Hooks\HookGenerals.cs" />
+    <Compile Include="Json\ExternalResourceManager.cs" />
     <Compile Include="PluginBinarizer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

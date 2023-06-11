@@ -57,13 +57,12 @@ namespace DD2
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
         static List<string> ModNames = new List<string>();
-        readonly static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
 
         public void OnRegister(BaseUnityPlugin plugin)
         {       
-            forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", false, "Force -enableEditorPrefs, no need to set command line args.");
+            forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", true, "Force -enableEditorPrefs, no need to set command line args.");
 
-            // Mod support: prepare directories
+            // Mod support: prepare directories and add external resources
             if (Directory.Exists(ModRootPath))
             {
                 string modOrderFile = Path.Combine(ModRootPath, "ModOrder.txt");
@@ -80,6 +79,15 @@ namespace DD2
                         ModNames.Add(Path.GetFileNameWithoutExtension(dir));
                     }
                 }
+
+                ModNames.RemoveAll(modName => string.IsNullOrEmpty(modName) || !Directory.Exists(Path.Combine(ModRootPath, modName)));
+                ModNames.RemoveAllDuplicates();
+
+                foreach (string modName in ModNames)
+                {
+                    string modPath = Path.Combine(ModRootPath, modName);
+                    ExternalResourceManager.AddModResources(modPath);
+                }
             }
         }
 
@@ -88,33 +96,20 @@ namespace DD2
         }
 
         /// <summary>
-        /// multi-mods simple support
+        /// multi-mods simple support prev
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(ResourceGroupCsvDatabase), "GatherResources")]
-        public static bool ModSupport(ref ResourceGroupCsvDatabase __instance)
+        public static bool ModSupportPrefix(ref ResourceGroupCsvDatabase __instance)
         {
             ModNames.Reverse();  // let game defaults be the lowest priority
 
             foreach (string modName in ModNames)
             {
-                if (string.IsNullOrEmpty(modName)) continue;
                 string modPath = Path.Combine(ModRootPath, modName);
+
                 var modFolder = AccessTools.CreateInstance(typeof(ResourceTextFolder));
                 var privateCtor = AccessTools.Constructor(typeof(ResourceTextFolder), new Type[] { typeof(string), typeof(string) });
                 privateCtor?.Invoke(modFolder, new object[] { modName.ToLowerInvariant(), Path.Combine(modPath, "Excel") });
-
-                // 加一下UI Sprites
-                var spriteDir = Path.Combine(modPath, "Sprites");
-                if (Directory.Exists(spriteDir))
-                {
-                    string[] sprites = Directory.GetFiles(spriteDir, "*.png");
-                    foreach (var spritePath in sprites)
-                    {
-                        var sprite = CreateSpriteFromPath(spritePath);
-                        ExternalSprites.Add(Path.GetFileNameWithoutExtension(spritePath), sprite);
-                        System.Console.WriteLine("Load Sprite: " + sprite.name);
-                    }
-                }
             }
 
             var folders = CustomEnum<ResourceTextFolder>.GetInstances() as List<ResourceTextFolder>;
@@ -125,6 +120,15 @@ namespace DD2
                 System.Console.WriteLine(textFolder.GetName());
             }
             return true;
+        }
+
+        /// <summary>
+        /// multi-mods simple support post
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(CampaignBhv), "Initialize")]
+        public static void ModSupportPostfix(ref CampaignBhv __instance)
+        {
+            ExternalResourceManager.ProcessModResources();
         }
 
         /// <summary>
@@ -212,64 +216,6 @@ namespace DD2
         }
 
         /// <summary>
-        /// 读取ResourceActor字段
-        /// </summary>
-        [HarmonyPostfix, HarmonyPatch(typeof(ActorDataClass), MethodType.Constructor, new Type[]{ typeof(string), typeof(string)})]
-        public static void RedirectResourceActor(string parseId, string csvText)
-        {
-            System.Console.WriteLine($"ActorClass key={parseId}");
-            var resourceActor = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors.GetResource(parseId);
-            if (resourceActor != null)
-            {
-                Traverse tResActor = new Traverse(resourceActor);
-                var fields = tResActor.Fields();
-                string[] lines = csvText.SplitLines();
-                foreach (var line in lines)
-                {
-                    string[] array = line.Split(new char[] { ','}, StringSplitOptions.RemoveEmptyEntries);
-                    string key = array[0];
-                    if (fields.Contains(key))
-                    {
-                        var field = tResActor.Field(key);
-                        Type fieldType = field.GetValueType();
-                        System.Console.WriteLine($"{array[0]}=({fieldType.Name}){array[1]}");
-                        if (fieldType == typeof(bool))
-                        {
-                            field.SetValue(Boolean.Parse(array[1]));
-                        }
-                        else if (fieldType == typeof(string))
-                        {
-                            field.SetValue(array[1]);
-                        }
-                        else if (fieldType == typeof(int))
-                        {
-                            field.SetValue(int.Parse(array[1]));
-                        }
-                        else if (fieldType == typeof(float))
-                        {
-                            field.SetValue(float.Parse(array[1]));
-                        }
-                        else if (fieldType == typeof(SelectionRosterStatusType))
-                        {
-                            field.Method("SetSelection", RosterStatusType.Cast(array[1])).GetValue();
-                        }
-                        else if (fieldType == typeof(Sprite))
-                        {
-                            if (ExternalSprites.ContainsKey(array[1]))
-                            {
-                                field.SetValue(ExternalSprites[array[1]]);
-                            }
-                            else
-                            {
-                                System.Console.WriteLine($"{array[1]} sprite not found!");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// 默认开启EditorPrefs
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(CommandLineUtils), "IsEditorPrefsEnabled")]
@@ -311,14 +257,17 @@ namespace DD2
         }
 
         /// <summary>
-        /// 初始随机怪癖：显示按钮
+        /// 初始随机怪癖：显示所有按钮
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(HeroSelectBhv), "PopulateActorInfo")]
         public static void RandomQuirkButton(ref HeroSelectBhv __instance)
         {
             if (TextBasedEditorPrefs.GetBool(RANDOM_INIT_QUIRKS))
             {
-                Traverse.Create(__instance).Field("m_resetButton").GetValue<GameObject>().SetActive(true);
+                var t = Traverse.Create(__instance);
+                t.Field("m_resetButton").GetValue<GameObject>().SetActive(true);
+                t.Field("m_editNameButton").GetValue<GameObject>().SetActive(true);
+                t.Field("m_randomNameButton").GetValue<GameObject>().SetActive(true);
             }
         }
 
@@ -517,38 +466,6 @@ namespace DD2
         }
 
         /// <summary>
-        /// Unity Create Sprite
-        /// </summary>
-        public static Sprite CreateSpriteFromPath(string FilePath, float PixelsPerUnit = 100.0f)
-        {
-            System.Console.WriteLine($"Sprite FilePath={FilePath}, Exist={File.Exists(FilePath)}");
-            Texture2D SpriteTexture = LoadTexture(FilePath);
-            System.Console.WriteLine($"SpriteTexture={SpriteTexture.name}");
-            Sprite NewSprite = Sprite.Create(SpriteTexture, new Rect(0, 0, SpriteTexture.width, SpriteTexture.height), new Vector2(0, 0), PixelsPerUnit);
-            return NewSprite;
-        }
-
-        /// <summary>
-        /// Unity Load Tex2D
-        /// </summary>
-        public static Texture2D LoadTexture(string FilePath)
-        {
-            Texture2D Tex2D;
-            byte[] FileData;
-
-            if (File.Exists(FilePath))
-            {
-                Tex2D = new Texture2D(32, 32);
-                FileData = File.ReadAllBytes(FilePath);
-                System.Console.WriteLine($"ReadData length={FileData?.Length}");
-                System.Console.WriteLine($"Tex2D={Tex2D.name}");
-                if (Tex2D.LoadImage(FileData))
-                    return Tex2D;
-            }
-            return null;
-        }
-
-        /// <summary>
         /// 将当前存档设为即时存档
         /// </summary>
         static void CopyCurrentSaveToQuickSave()
@@ -701,6 +618,9 @@ namespace DD2
         private static HeroSelectBhv heroSelectBhv = null;
         private static Vector3 containerInitPos = Vector3.zero;
 
+        private readonly static bool dealJson = false;
+        private readonly static bool resourceActorsFromJson = true;
+
         /// <summary>
         /// 职业可重复选择：选人菜单加人
         /// </summary>
@@ -723,16 +643,17 @@ namespace DD2
             heroSelectBhv = __instance;
 
             Roster roster = SingletonMonoBehaviour<CampaignBhv>.Instance.Roster;
+            var resourceActors = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors;
             Traverse tRoster = new Traverse(roster);
             var entries = tRoster.Field("m_Entries").GetValue<List<RosterEntry>>();
-            var resourceActors = tRoster.Field("m_ActorResourceDatabase").GetValue<ResourceDatabaseActors>();
             List<ResourceActor> list = new List<ResourceActor>();
             List<int> counts = new List<int>();
             for (int i = 0; i < resourceActors.GetNumberOfResources(); i++)
             {
                 ResourceActor actorResource = resourceActors.GetResourceAtIndex(i);
+                System.Console.WriteLine($"try add {actorResource.name}");
                 int added = entries.Count(entry => entry.ActorClassId == actorResource.name);
-                System.Console.WriteLine($"Try add class {actorResource.name}, statue={actorResource.StartingRosterStatusType}, populate={actorResource.GetPopulateInRoster()}, added={added}");
+
                 if (actorResource != null && actorResource.GetPopulateInRoster() && added < instancesPerClass)
                 {
                     ActorDataClass libraryElement = SingletonMonoBehaviour<Library<string, ActorDataClass>>.Instance.GetLibraryElement(actorResource.name);
@@ -750,6 +671,7 @@ namespace DD2
                 int addCount = counts[i];
                 for (int j = 0; j < addCount; ++j)
                 {
+                    System.Console.WriteLine($"Add class {resourceActor.name}, statue={resourceActor.StartingRosterStatusType}, populate={resourceActor.GetPopulateInRoster()}");
                     uint guid = LibraryActors.LibraryActorsInstance.CreateActor(resourceActor, null, null);
                     RosterEntry rosterEntry = new RosterEntry(resourceActor.name, guid);
                     entries.Add(rosterEntry);
