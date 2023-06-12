@@ -272,6 +272,23 @@ namespace DD2
         }
 
         /// <summary>
+        /// 初始随机怪癖：按随机名字换装
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(HeroSelectBhv), "RollNewActorName")]
+        public static void RandomSkins(ref HeroSelectBhv __instance)
+        {
+            var m_SpawnedActor = Traverse.Create(__instance).Field("m_SpawnedActor").GetValue<ActorBhv>();
+            var actorDataId = m_SpawnedActor.ActorInstance.ActorDataId;
+            var res = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors.GetResource(actorDataId);
+            var ArtList = new List<IResourceActorArt> { res };
+            var skins = ExternalResourceManager.ResourceActorSkinDb.GetSkinsForActor(res);
+            ArtList.AddRange(skins);
+            var artRandom = ArtList[UnityEngine.Random.Range(0, ArtList.Count)];
+            m_SpawnedActor.SetActorArt(artRandom);
+            m_SpawnedActor.ActorInstance.SetActorArt(artRandom);
+        }
+
+        /// <summary>
         /// 通过listener存一下CharacterSheetUiBhv
         /// </summary>
         private static CharacterSheetUiBhv characterSheetUiBhv = null;

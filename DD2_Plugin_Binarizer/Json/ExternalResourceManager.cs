@@ -28,6 +28,11 @@ namespace DD2
         public static ResourceDatabaseActors ResourceActorDb = null;
 
         /// <summary>
+        /// ResourceActorSkin DB
+        /// </summary>
+        public static ResourceDatabaseActorSkins ResourceActorSkinDb = null;
+
+        /// <summary>
         /// ResourceSkill DB
         /// </summary>
         public static ResourceDatabaseSkills ResourceSkillDb = null;
@@ -51,6 +56,11 @@ namespace DD2
         /// Inherit ResourceSkill
         /// </summary>
         public static readonly ResourceDatabaseText ResourceSkillInherit = new ResourceDatabaseText();
+
+        /// <summary>
+        /// Inherit ResourceActorSkin
+        /// </summary>
+        public static readonly ResourceDatabaseText ResourceActorSkinNew = new ResourceDatabaseText();
 
         /// <summary>
         /// Unity Create Sprite
@@ -106,16 +116,28 @@ namespace DD2
             ResourceSkillDb = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseSkills;
             var tDbActor = Traverse.Create(ResourceActorDb);
             var tDbSkill = Traverse.Create(ResourceSkillDb);
-            int ActorCount = ResourceActorDb.GetNumberOfResources();
-            int SkillCount = ResourceSkillDb.GetNumberOfResources();
             var ActorList = tDbActor.Field("m_Resources").GetValue<List<ResourceActor>>();
             var ActorDict = tDbActor.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceActor>>();
             var SkillList = tDbSkill.Field("m_Resources").GetValue<List<ResourceSkillBase>>();
             var SkillDict = tDbSkill.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceSkillBase>>();
+            int ActorCount = ResourceActorDb.GetNumberOfResources();
+            int SkillCount = ResourceSkillDb.GetNumberOfResources();
             System.Console.WriteLine($"ResourceActor count = {ActorCount}");
             System.Console.WriteLine($"ResourceSkill count = {SkillCount}");
+
+            // 2. Visuals
+            Traverse tVisual = Traverse.Create(SingletonMonoBehaviour<ActorCreateGameObjectBhv>.Instance);
+            var tDbActorSkin = tVisual.Field("m_ResourceDatabaseActorSkins");
+            ResourceActorSkinDb = tDbActorSkin.GetValue<ResourceDatabaseActorSkins>();
+            int SkinCount = ResourceActorSkinDb.GetNumberOfResources();
+            System.Console.WriteLine($"ResourceActorSkin count = {SkinCount}");
+            var ActorSkinList = tDbActorSkin.Field("m_Resources").GetValue<List<ResourceActorSkin>>();
+            var ActorSkinDict = tDbActorSkin.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceActorSkin>>();
+
+            // 3. Export
             if (resourceExport)
             {
+                // actor
                 string dirActor = Path.Combine(Environment.CurrentDirectory, "ResourceActors");
                 if (!Directory.Exists(dirActor))
                     Directory.CreateDirectory(dirActor);
@@ -127,6 +149,7 @@ namespace DD2
                     File.WriteAllText(path, originalText);
                 }
 
+                // skill
                 string dirSkill = Path.Combine(Environment.CurrentDirectory, "ResourceSkills");
                 if (!Directory.Exists(dirSkill))
                     Directory.CreateDirectory(dirSkill);
@@ -137,9 +160,21 @@ namespace DD2
                     ResourceToCsv(resourceSkill, out string originalText);
                     File.WriteAllText(path, originalText);
                 }
+
+                // skin
+                string dirSkins = Path.Combine(Environment.CurrentDirectory, "ResourceActorSkins");
+                if (!Directory.Exists(dirSkins))
+                    Directory.CreateDirectory(dirSkins);
+                for (int i = 0; i < SkinCount; ++i)
+                {
+                    var resourceActorSkin = ResourceActorSkinDb.GetResourceAtIndex(i);
+                    string path = Path.Combine(dirSkins, resourceActorSkin.name + ".csv");
+                    ResourceToCsv(resourceActorSkin, out string originalText);
+                    File.WriteAllText(path, originalText);
+                }
             }
 
-            // 2. ResourceSkill Modify
+            // 4. ResourceSkill Modify
             ResourceSkillModify.m_FileTypeFilters = new List<string> { "ResourceSkillModify" };
             int ModifySkillCount = ResourceSkillModify.GetNumberOfResources();
             System.Console.WriteLine($"ResourceSkillModify count = {ModifySkillCount}");
@@ -153,7 +188,7 @@ namespace DD2
                 }
             }
 
-            // 3. ResourceSkill Inherit
+            // 5. ResourceSkill Inherit
             ResourceSkillInherit.m_FileTypeFilters = new List<string> { "ResourceSkillInherit" };
             int InheritSkillCount = ResourceSkillInherit.GetNumberOfResources();
             System.Console.WriteLine($"ResourceSkillInherit count = {InheritSkillCount}");
@@ -173,7 +208,7 @@ namespace DD2
                 }
             }
 
-            // 4. ResourceActor Modify
+            // 6. ResourceActor Modify
             ResourceActorModify.m_FileTypeFilters = new List<string> { "ResourceActorModify" };
             int ModifyActorCount = ResourceActorModify.GetNumberOfResources();
             System.Console.WriteLine($"ResourceActorModify count = {ModifyActorCount}");
@@ -187,7 +222,7 @@ namespace DD2
                 }
             }
 
-            // 5. ResourceActor Inherit
+            // 7. ResourceActor Inherit
             ResourceActorInherit.m_FileTypeFilters = new List<string> { "ResourceActorInherit" };
             int InheritActorCount = ResourceActorInherit.GetNumberOfResources();
             System.Console.WriteLine($"ResourceActorInherit count = {InheritActorCount}");
@@ -205,6 +240,20 @@ namespace DD2
                     ActorList.Add(resourceActor);
                     ActorDict.Add(data.m_Name, resourceActor);
                 }
+            }
+
+            // 8. ResourceActorSkin New
+            ResourceActorSkinNew.m_FileTypeFilters = new List<string> { "ResourceActorSkin" };
+            int InheritActorSkinCount = ResourceActorSkinNew.GetNumberOfResources();
+            System.Console.WriteLine($"ResourceActorSkinInherit count = {InheritActorSkinCount}");
+            for (int i = 0; i < InheritActorSkinCount; i++)
+            {
+                var data = ResourceActorSkinNew.GetResourceAtIndex(i);
+                ResourceActorSkin res = ScriptableObject.CreateInstance<ResourceActorSkin>();
+                res.name = data.m_Name;
+                CsvToResource(data.m_Data, res);
+                ActorSkinList.Add(res);
+                ActorSkinDict.Add(data.m_Name, res);
             }
         }
 
@@ -267,9 +316,9 @@ namespace DD2
                             System.Console.WriteLine($"{array[1]} sprite not found!");
                         }
                     }
-                    else if (fieldType == typeof(AssetReferenceGameObject))
+                    else if (typeof(AssetReference).IsAssignableFrom(fieldType))
                     {
-                        field.SetValue(new AssetReferenceGameObject(array[1]));
+                        field.SetValue(Activator.CreateInstance(fieldType, array[1]));
                     }
                     else if (fieldType == typeof(ResourceActor))
                     {
@@ -339,6 +388,10 @@ namespace DD2
                     if (fieldType == typeof(string))
                     {
                         sb.AppendLine($"{key},{fieldValue},");
+                    }
+                    else if (typeof(AssetReference).IsAssignableFrom(fieldType))
+                    {
+                        sb.AppendLine($"{key},{(fieldValue as AssetReference).AssetGUID},");
                     }
                     else if (fieldValue is UnityEngine.Object obj)
                     {
