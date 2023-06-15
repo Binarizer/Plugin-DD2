@@ -294,6 +294,31 @@ namespace DD2
         private static CharacterSheetUiBhv characterSheetUiBhv = null;
 
         /// <summary>
+        /// 角色大小
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(ActorBhv), "SetClassState")]
+        public static bool SetScale(ActorBhv __instance, ref IResourceActorAccessor resourceActorAccessor)
+        {
+            if (ExternalResourceManager.ArtScaleDict.ContainsKey(resourceActorAccessor.name))
+            {
+                __instance.CharacterRoot.localScale *= ExternalResourceManager.ArtScaleDict[resourceActorAccessor.name];
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 角色声音
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(AudioPathUtils), "MakeActorPrefix")]
+        public static void SetAudioPath(ref ResourceActor resourceActor, ref string __result)
+        {
+            if (ExternalResourceManager.AudioPathDict.ContainsKey(resourceActor.name))
+            {
+                __result = ExternalResourceManager.AudioPathDict[resourceActor.name];
+            }
+        }
+
+        /// <summary>
         /// 换待机人物
         /// </summary>
         public static void HandleInputReplaceActor(string action, InputActionDelegateValues values)

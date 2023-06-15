@@ -63,6 +63,16 @@ namespace DD2
         public static readonly ResourceDatabaseText ResourceActorSkinNew = new ResourceDatabaseText();
 
         /// <summary>
+        /// Scale Modifier
+        /// </summary>
+        public static Dictionary<string, float> ArtScaleDict = new Dictionary<string, float>();
+
+        /// <summary>
+        /// AudioPath Modifier
+        /// </summary>
+        public static Dictionary<string, string> AudioPathDict = new Dictionary<string, string>();
+
+        /// <summary>
         /// Unity Create Sprite
         /// </summary>
         public static Sprite CreateSpriteFromPath(string FilePath, float PixelsPerUnit = 100.0f)
@@ -281,7 +291,15 @@ namespace DD2
             {
                 string[] array = line.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 string key = array[0];
-                if (fields.Contains(key))
+                if (key == "Scale")
+                {
+                    ArtScaleDict[array[1]] = float.Parse(array[2]);
+                }
+                else if (key == "Audio")
+                {
+                    AudioPathDict[array[1]] = array[2];
+                }
+                else if (fields.Contains(key))
                 {
                     var field = tResActor.Field(key);
                     Type fieldType = field.GetValueType();
