@@ -12,6 +12,8 @@ using Assets.Code.Utils.Serialization;
 using Assets.Code.Resource;
 using Assets.Code.Actor;
 using System.Collections;
+using Assets.Code.Gfx;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace DD2
 {
@@ -104,7 +106,14 @@ namespace DD2
 
         public static void AddModResources(string modPath)
         {
-            // 1. UI sprites
+            // 1. Addressables
+            var catalogPath = Path.Combine(modPath, "catalog.json");
+            if (File.Exists(catalogPath))
+            {
+                Addressables.LoadContentCatalogAsync(catalogPath);
+            }
+
+            // 2. UI sprites
             var spriteDir = Path.Combine(modPath, "Sprites");
             if (Directory.Exists(spriteDir))
             {
@@ -444,6 +453,16 @@ namespace DD2
             }
             sb.AppendLine($"element_end");
             csvText = sb.ToString();
+        }
+
+        public static void LoadByAddress<AssetType>(string address) where AssetType : UnityEngine.Object
+        {
+            var t = Traverse.Create(Singleton<AddressableReferencesManager>.Instance);
+            if (!t.Field("m_LoadingHandles").Method("ContainsKey", address).GetValue<bool>())
+            {
+                AsyncOperationHandle<AssetType> handle = Addressables.LoadAssetAsync<AssetType>(address);
+                Singleton<AddressableReferencesManager>.Instance.RegisterLoadingHandle(address, handle);
+            }
         }
     }
 }

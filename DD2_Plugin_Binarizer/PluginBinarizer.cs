@@ -5,7 +5,7 @@ using BepInEx;
 
 namespace DD2
 {
-    [BepInPlugin("binarizer.plugin.dd2", "功能合集 by Binarizer", "1.3.2")]
+    [BepInPlugin("binarizer.plugin.dd2", "功能合集 by Binarizer", "1.4.0")]
     public class PluginBinarizer : BaseUnityPlugin
     {
         void RegisterHook(IHook hook)

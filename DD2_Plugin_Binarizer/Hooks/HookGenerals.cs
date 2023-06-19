@@ -34,6 +34,10 @@ using Assets.Code.Item;
 using Assets.Code.Resource;
 using Assets.Code.Locale;
 using Assets.Code.Locale.Sources;
+using Assets.Code.Gfx;
+using UnityEngine.AddressableAssets;
+using Assets.Code.Combat.Signals;
+using Assets.Code.Combat.Presentation;
 
 namespace DD2
 {
@@ -216,6 +220,72 @@ namespace DD2
         }
 
         /// <summary>
+        /// 用RuntimeKey读取
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(AssetReference), "RuntimeKeyIsValid")]
+        public static void LoadingExternal(ref AssetReference __instance, ref bool __result)
+        {
+            if (!__result)
+            {
+                __result = true;
+                ExternalResourceManager.LoadByAddress<GameObject>(__instance.AssetGUID);
+                Debug.Log($"Hack RuntimeKeyIsValid, key={__instance.RuntimeKey}");
+            }
+        }
+
+        /// <summary>
+        /// 暂时不读取骨骼位置：判空1
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(ActorBhv), "CurrentBoneRemapping", MethodType.Getter)]
+        public static bool FixEmpty(ref ActorBhv __instance, ref BoneRemapping __result)
+        {
+            if (Traverse.Create(__instance).Field("m_CurrentBoneRemapping").GetValue() == null)
+            {
+                __result = null;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 暂时不读取骨骼位置：判空2
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(TimelinePropertyMapBhv), "UpdateMutualBindingMaps")]
+        public static bool FixEmpty2(ref TimelinePropertyMapBhv __instance, ref ActorBhv actorBhv)
+        {
+            var m_MutualBindingMaps = Traverse.Create(__instance).Field("m_MutualBindingMaps").GetValue<Dictionary<string, TimelinePropertyMapBhv>>();
+            foreach (GameObject gameObject in actorBhv.GetArtStates())
+            {
+                TimelinePropertyMapBhv componentInChildren = gameObject.GetComponentInChildren<TimelinePropertyMapBhv>();
+                var tchild = Traverse.Create(componentInChildren);
+                var MyBoneRemapping = tchild.Property("MyBoneRemapping").GetValue<BoneRemapping>();
+                if (!(componentInChildren == null) && !(componentInChildren == __instance))
+                {
+                    foreach (ResourceActor resourceActor in actorBhv.GetResourceActorsForArtState(gameObject))
+                    {
+                        if (m_MutualBindingMaps.ContainsKey(resourceActor.name))
+                        {
+                            Debug.LogWarning("Two TimelinePropertyMapBhv with the same " + resourceActor.name + " spawned under the same character, this might cause some binding issues", componentInChildren);
+                        }
+                        else
+                        {
+                            m_MutualBindingMaps.Add(resourceActor.name, componentInChildren);
+                            if (MyBoneRemapping && MyBoneRemapping.name != null)
+                            {
+                                if (resourceActor.name != MyBoneRemapping.name && !m_MutualBindingMaps.ContainsKey(MyBoneRemapping.name))
+                                {
+                                    m_MutualBindingMaps.Add(MyBoneRemapping.name, componentInChildren);
+                                }
+                            }
+                        }
+                    }
+                    tchild.Method("Initialize", false).GetValue();
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// 默认开启EditorPrefs
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(CommandLineUtils), "IsEditorPrefsEnabled")]
@@ -299,6 +369,11 @@ namespace DD2
         [HarmonyPrefix, HarmonyPatch(typeof(ActorBhv), "SetClassState")]
         public static bool SetScale(ActorBhv __instance, ref IResourceActorAccessor resourceActorAccessor)
         {
+            for (int i = 0; i < __instance.CharacterRoot.childCount; ++i)
+            {
+                var child = __instance.CharacterRoot.GetChild(i);
+                Debug.Log(child.name + ": " + child.GetType().Name);
+            }
             if (ExternalResourceManager.ArtScaleDict.ContainsKey(resourceActorAccessor.name))
             {
                 __instance.CharacterRoot.localScale *= ExternalResourceManager.ArtScaleDict[resourceActorAccessor.name];
@@ -659,9 +734,6 @@ namespace DD2
 
         private static HeroSelectBhv heroSelectBhv = null;
         private static Vector3 containerInitPos = Vector3.zero;
-
-        private readonly static bool dealJson = false;
-        private readonly static bool resourceActorsFromJson = true;
 
         /// <summary>
         /// 职业可重复选择：选人菜单加人

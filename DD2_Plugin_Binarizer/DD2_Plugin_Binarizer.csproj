@@ -83,6 +83,10 @@
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\Unity.InputSystem.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\Unity.ResourceManager.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>L:\Steam\steamapps\common\Darkest Dungeon® II\Darkest Dungeon II_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
