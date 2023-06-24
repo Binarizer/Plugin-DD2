@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Playables;
 using UnityEngine.UI;
+using UnityEngine.AddressableAssets;
 using HarmonyLib;
 using BepInEx;
 using BepInEx.Configuration;
@@ -34,8 +35,6 @@ using Assets.Code.Item;
 using Assets.Code.Resource;
 using Assets.Code.Locale;
 using Assets.Code.Locale.Sources;
-using Assets.Code.Gfx;
-using UnityEngine.AddressableAssets;
 using Assets.Code.Combat.Signals;
 using Assets.Code.Combat.Presentation;
 
@@ -45,6 +44,7 @@ namespace DD2
     public class HookGenerals : IHook
     {
         private static ConfigEntry<bool> forceEnableEditorPrefs;
+        private static ConfigEntry<bool> resourceExport;
 
         const string PluginGroupName = "_PLUGIN_BINARIZER_";
         public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills at beginning.", PluginGroupName, true);
@@ -65,6 +65,7 @@ namespace DD2
         public void OnRegister(BaseUnityPlugin plugin)
         {       
             forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", true, "Force -enableEditorPrefs, no need to set command line args.");
+            resourceExport = plugin.Config.Bind("General", "Export Official Resources", false, "Export Official Resources.");
 
             // Mod support: prepare directories and add external resources
             if (Directory.Exists(ModRootPath))
@@ -130,9 +131,9 @@ namespace DD2
         /// multi-mods simple support post
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(CampaignBhv), "Initialize")]
-        public static void ModSupportPostfix(ref CampaignBhv __instance)
+        public static void ModSupportPostfix()
         {
-            ExternalResourceManager.ProcessModResources();
+            ExternalResourceManager.AddModResources(resourceExport.Value);
         }
 
         /// <summary>
@@ -225,11 +226,11 @@ namespace DD2
         [HarmonyPostfix, HarmonyPatch(typeof(AssetReference), "RuntimeKeyIsValid")]
         public static void LoadingExternal(ref AssetReference __instance, ref bool __result)
         {
-            if (!__result)
+            if (!__result && !string.IsNullOrEmpty(__instance.AssetGUID))
             {
                 __result = true;
                 ExternalResourceManager.LoadByAddress<GameObject>(__instance.AssetGUID);
-                Debug.Log($"Hack RuntimeKeyIsValid, key={__instance.RuntimeKey}");
+                Debug.Log($"Hack RuntimeKeyIsValid, key={__instance.AssetGUID}");
             }
         }
 
@@ -350,8 +351,9 @@ namespace DD2
             var m_SpawnedActor = Traverse.Create(__instance).Field("m_SpawnedActor").GetValue<ActorBhv>();
             var actorDataId = m_SpawnedActor.ActorInstance.ActorDataId;
             var res = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors.GetResource(actorDataId);
-            var ArtList = new List<IResourceActorArt> { res };
-            var skins = ExternalResourceManager.ResourceActorSkinDb.GetSkinsForActor(res);
+            var ArtList = new List<IResourceActorArt> { res }; 
+            var dbSkin = Traverse.Create(SingletonMonoBehaviour<ActorCreateGameObjectBhv>.Instance).Field("m_ResourceDatabaseActorSkins").GetValue<ResourceDatabaseActorSkins>();
+            var skins = dbSkin.GetSkinsForActor(res);
             ArtList.AddRange(skins);
             var artRandom = ArtList[UnityEngine.Random.Range(0, ArtList.Count)];
             m_SpawnedActor.SetActorArt(artRandom);
@@ -956,6 +958,16 @@ namespace DD2
         {
             if (TextBasedEditorPrefs.GetBool(BIOME_ALWAYS_EMBARK))
                 __result = null;
+        }
+
+
+        /// <summary>
+        /// Add ResourceDatabase
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(ResourceDatabaseObject<ScriptableObject>), "OnEnable")]
+        public static void PostDatabase(ref ScriptableObject __instance)
+        {
+           ExternalResourceManager.AddResourceDatabase(__instance);
         }
     }
 }

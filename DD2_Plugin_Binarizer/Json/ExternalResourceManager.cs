@@ -1,68 +1,162 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using HarmonyLib;
-using Assets.Code.Campaign;
 using Assets.Code.Utils;
 using Assets.Code.Utils.Serialization;
 using Assets.Code.Resource;
-using Assets.Code.Actor;
-using System.Collections;
 using Assets.Code.Gfx;
-using UnityEngine.ResourceManagement.AsyncOperations;
+using Assets.Code.Actor;
 
 namespace DD2
 {
+    /// <summary>
+    /// 将红勾Scriptable配置，通过文本进行CRU(D)的类
+    /// </summary>
+    public interface IScriptableObjectTextCrud 
+    {
+        Type GetItemType();
+        void Crud();
+
+        void SetField(Traverse field, string strParam);
+        void SetListField(Traverse listField, string[] strParamArray);
+        void Export(string exportDir);
+    }
+
+    public class ScriptableObjectTextCrud<T> : IScriptableObjectTextCrud where T : ScriptableObject
+    {
+        public ScriptableObjectTextCrud(string name, ResourceDatabaseObject<T> db)
+        {
+            DataName = name;
+            System.Console.WriteLine($"CrudName = {name}, DbType = {typeof(T).Name}");
+            DbReference = db;
+            var tDb = Traverse.Create(db);
+            ResourceList = tDb.Field("m_Resources").GetValue<List<T>>();
+            ResourceDict = tDb.Field("m_ResourcesDictionary").GetValue<Dictionary<string, T>>();
+            DbTextModify = ScriptableObject.CreateInstance<ResourceDatabaseText>();
+            DbTextInherit = ScriptableObject.CreateInstance<ResourceDatabaseText>();
+            DbTextNew = ScriptableObject.CreateInstance<ResourceDatabaseText>();
+        }
+
+        public void Export(string exportDir)
+        {
+            if (!Directory.Exists(exportDir))
+                Directory.CreateDirectory(exportDir);
+            string dir = Path.Combine(exportDir, DataName);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            System.Console.WriteLine($"Export to {dir}");
+            int resourceCount = DbReference.GetNumberOfResources();
+            for (int i = 0; i < resourceCount; ++i)
+            {
+                var resource = DbReference.GetResourceAtIndex(i);
+                string path = Path.Combine(dir, resource.name + ".csv");
+                ExternalResourceManager.ResourceToCsv(resource, out string originalText);
+                File.WriteAllText(path, originalText);
+            }
+        }
+
+        public void Crud()
+        {
+            // Apply Modify
+            DbTextModify.m_FileTypeFilters = new List<string> { DataName + "Modify" };
+            int modifyCount = DbTextModify.GetNumberOfResources();
+            System.Console.WriteLine($"Modify count = {modifyCount}");
+            for (int i = 0; i < modifyCount; i++)
+            {
+                var data = DbTextModify.GetResourceAtIndex(i);
+                var resourceSkill = DbReference.GetResource(data.m_Name);
+                if (resourceSkill)
+                {
+                    ExternalResourceManager.CsvToResource(data.m_Data, resourceSkill);
+                }
+            }
+
+            // Inherit Instantiate
+            DbTextInherit.m_FileTypeFilters = new List<string> { DataName + "Inherit" };
+            int inheritCount = DbTextInherit.GetNumberOfResources();
+            System.Console.WriteLine($"Inherit count = {inheritCount}");
+            for (int i = 0; i < inheritCount; i++)
+            {
+                var data = DbTextInherit.GetResourceAtIndex(i);
+                var lines = data.m_Data.SplitFirstLine();
+                var inhertName = lines[0].Split(',')[1].Trim();
+                var resourceInhert = DbReference.GetResource(inhertName);
+                if (resourceInhert)
+                {
+                    T scriptableObject = UnityEngine.Object.Instantiate(resourceInhert);
+                    scriptableObject.name = data.m_Name;
+                    ExternalResourceManager.CsvToResource(lines[1], scriptableObject);
+                    ResourceList.Add(scriptableObject);
+                    ResourceDict.Add(data.m_Name, scriptableObject);
+                }
+            }
+
+            // New Instantiate
+            DbTextNew.m_FileTypeFilters = new List<string> { DataName };
+            int newCount = DbTextNew.GetNumberOfResources();
+            System.Console.WriteLine($"New count = {newCount}");
+            for (int i = 0; i < newCount; i++)
+            {
+                var data = DbTextNew.GetResourceAtIndex(i);
+                T scriptableObject = ScriptableObject.CreateInstance<T>();
+                scriptableObject.name = data.m_Name;
+                ExternalResourceManager.CsvToResource(data.m_Data, scriptableObject);
+                ResourceList.Add(scriptableObject);
+                ResourceDict.Add(data.m_Name, scriptableObject);
+            }
+        }
+
+        public void SetField(Traverse field, string strParam)
+        {
+            field.SetValue(DbReference.GetResource(strParam));
+        }
+
+        public void SetListField(Traverse listField, string[] strParamArray)
+        {
+            var list = new List<T>();
+            for (int i = 1; i < strParamArray.Length; ++i)
+            {
+                var obj = DbReference.GetResource(strParamArray[i]);
+                if (obj)
+                {
+                    list.Add(obj);
+                }
+            }
+            listField.SetValue(list);
+        }
+
+        public Type GetItemType()
+        {
+            return typeof(T);
+        }
+
+        string DataName = null;
+        ResourceDatabaseObject<T> DbReference = null;
+        List<T> ResourceList = null;
+        Dictionary<string, T> ResourceDict = null;
+        ResourceDatabaseText DbTextModify = null;
+        ResourceDatabaseText DbTextInherit = null;
+        ResourceDatabaseText DbTextNew = null;
+    }
+
     public static class ExternalResourceManager
     {
         /// <summary>
         /// External Sprite Container
         /// </summary>
+        readonly static List<IScriptableObjectTextCrud> CrudList = new List<IScriptableObjectTextCrud>();
+
+        /// <summary>
+        /// External Sprite Container
+        /// </summary>
         readonly static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
-
-        /// <summary>
-        /// ResourceActor DB
-        /// </summary>
-        public static ResourceDatabaseActors ResourceActorDb = null;
-
-        /// <summary>
-        /// ResourceActorSkin DB
-        /// </summary>
-        public static ResourceDatabaseActorSkins ResourceActorSkinDb = null;
-
-        /// <summary>
-        /// ResourceSkill DB
-        /// </summary>
-        public static ResourceDatabaseSkills ResourceSkillDb = null;
-
-        /// <summary>
-        /// Modify ResourceActor
-        /// </summary>
-        public static readonly ResourceDatabaseText ResourceActorModify = new ResourceDatabaseText();
-
-        /// <summary>
-        /// Inherit ResourceActor
-        /// </summary>
-        public static readonly ResourceDatabaseText ResourceActorInherit = new ResourceDatabaseText();
-
-        /// <summary>
-        /// Modify ResourceSkill
-        /// </summary>
-        public static readonly ResourceDatabaseText ResourceSkillModify = new ResourceDatabaseText();
-
-        /// <summary>
-        /// Inherit ResourceSkill
-        /// </summary>
-        public static readonly ResourceDatabaseText ResourceSkillInherit = new ResourceDatabaseText();
-
-        /// <summary>
-        /// Inherit ResourceActorSkin
-        /// </summary>
-        public static readonly ResourceDatabaseText ResourceActorSkinNew = new ResourceDatabaseText();
 
         /// <summary>
         /// Scale Modifier
@@ -126,153 +220,46 @@ namespace DD2
             }
         }
 
-        private readonly static bool resourceExport = false;
-
-        public static void ProcessModResources()
+        public static void AddResourceDatabase(ScriptableObject db)
         {
-            // 1. Resource Source
-            ResourceActorDb = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors;
-            ResourceSkillDb = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseSkills;
-            var tDbActor = Traverse.Create(ResourceActorDb);
-            var tDbSkill = Traverse.Create(ResourceSkillDb);
-            var ActorList = tDbActor.Field("m_Resources").GetValue<List<ResourceActor>>();
-            var ActorDict = tDbActor.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceActor>>();
-            var SkillList = tDbSkill.Field("m_Resources").GetValue<List<ResourceSkillBase>>();
-            var SkillDict = tDbSkill.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceSkillBase>>();
-            int ActorCount = ResourceActorDb.GetNumberOfResources();
-            int SkillCount = ResourceSkillDb.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceActor count = {ActorCount}");
-            System.Console.WriteLine($"ResourceSkill count = {SkillCount}");
+            Type typeArg = db.GetType().BaseType.GetGenericArguments()[0];
+            Type typeCrud = typeof(ScriptableObjectTextCrud<>).MakeGenericType(typeArg);
+            string name = typeArg.Name;
+            if (name.EndsWith("Base"))
+                name = name.Substring(0, name.Length - 4);
 
-            // 2. Visuals
-            Traverse tVisual = Traverse.Create(SingletonMonoBehaviour<ActorCreateGameObjectBhv>.Instance);
-            var tDbActorSkin = tVisual.Field("m_ResourceDatabaseActorSkins");
-            ResourceActorSkinDb = tDbActorSkin.GetValue<ResourceDatabaseActorSkins>();
-            int SkinCount = ResourceActorSkinDb.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceActorSkin count = {SkinCount}");
-            var ActorSkinList = tDbActorSkin.Field("m_Resources").GetValue<List<ResourceActorSkin>>();
-            var ActorSkinDict = tDbActorSkin.Field("m_ResourcesDictionary").GetValue<Dictionary<string, ResourceActorSkin>>();
+            System.Console.WriteLine($"Database {name}, Resource Count = {Traverse.Create(db).Field("m_Resources").Property("Count").GetValue()}");
 
-            // 3. Export
-            if (resourceExport)
+            CrudList.Add(Activator.CreateInstance(typeCrud, name, db) as IScriptableObjectTextCrud);
+        }
+        public static IList<T> Swap<T>(this IList<T> list, int indexA, int indexB)
+        {
+            (list[indexB], list[indexA]) = (list[indexA], list[indexB]);
+            return list;
+        }
+
+        public static void AddModResources(bool export)
+        {
+            // order matters for dependencies
+            int crudSkill = CrudList.FindIndex(crud => crud.GetItemType() == typeof(ResourceSkillBase));
+            int crudActor = CrudList.FindIndex(crud => crud.GetItemType() == typeof(ResourceActor));
+            if (crudSkill >= 0 && crudActor >= 0 && crudActor < crudSkill)
             {
-                // actor
-                string dirActor = Path.Combine(Environment.CurrentDirectory, "ResourceActors");
-                if (!Directory.Exists(dirActor))
-                    Directory.CreateDirectory(dirActor);
-                for (int i = 0; i < ActorCount; ++i)
-                {
-                    var resourceActor = ResourceActorDb.GetResourceAtIndex(i);
-                    string path = Path.Combine(dirActor, resourceActor.name + ".csv");
-                    ResourceToCsv(resourceActor, out string originalText);
-                    File.WriteAllText(path, originalText);
-                }
+                CrudList.Swap(crudSkill, crudActor);
+            }
 
-                // skill
-                string dirSkill = Path.Combine(Environment.CurrentDirectory, "ResourceSkills");
-                if (!Directory.Exists(dirSkill))
-                    Directory.CreateDirectory(dirSkill);
-                for (int i = 0; i < SkillCount; ++i)
+            if (export)
+            {
+                string exportDir = Path.Combine(Environment.CurrentDirectory, "OfficalResourceExport");
+                foreach (var crud in CrudList)
                 {
-                    var resourceSkill = ResourceSkillDb.GetResourceAtIndex(i);
-                    string path = Path.Combine(dirSkill, resourceSkill.name + ".csv");
-                    ResourceToCsv(resourceSkill, out string originalText);
-                    File.WriteAllText(path, originalText);
-                }
-
-                // skin
-                string dirSkins = Path.Combine(Environment.CurrentDirectory, "ResourceActorSkins");
-                if (!Directory.Exists(dirSkins))
-                    Directory.CreateDirectory(dirSkins);
-                for (int i = 0; i < SkinCount; ++i)
-                {
-                    var resourceActorSkin = ResourceActorSkinDb.GetResourceAtIndex(i);
-                    string path = Path.Combine(dirSkins, resourceActorSkin.name + ".csv");
-                    ResourceToCsv(resourceActorSkin, out string originalText);
-                    File.WriteAllText(path, originalText);
+                    crud.Export(exportDir);
                 }
             }
 
-            // 4. ResourceSkill Modify
-            ResourceSkillModify.m_FileTypeFilters = new List<string> { "ResourceSkillModify" };
-            int ModifySkillCount = ResourceSkillModify.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceSkillModify count = {ModifySkillCount}");
-            for (int i = 0; i < ModifySkillCount; i++)
+            foreach (var crud in CrudList)
             {
-                var data = ResourceSkillModify.GetResourceAtIndex(i);
-                var resourceSkill = ResourceSkillDb.GetResource(data.m_Name);
-                if (resourceSkill)
-                {
-                    CsvToResource(data.m_Data, resourceSkill);
-                }
-            }
-
-            // 5. ResourceSkill Inherit
-            ResourceSkillInherit.m_FileTypeFilters = new List<string> { "ResourceSkillInherit" };
-            int InheritSkillCount = ResourceSkillInherit.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceSkillInherit count = {InheritSkillCount}");
-            for (int i = 0; i < InheritSkillCount; i++)
-            {
-                var data = ResourceSkillInherit.GetResourceAtIndex(i);
-                var lines = data.m_Data.SplitFirstLine();
-                var inhertName = lines[0].Split(',')[1].Trim();
-                var resourceSkillInhert = ResourceSkillDb.GetResource(inhertName);
-                if (resourceSkillInhert)
-                {
-                    ResourceSkillBase resourceSkill = UnityEngine.Object.Instantiate(resourceSkillInhert);
-                    resourceSkill.name = data.m_Name;
-                    CsvToResource(lines[1], resourceSkill);
-                    SkillList.Add(resourceSkill);
-                    SkillDict.Add(data.m_Name, resourceSkill);
-                }
-            }
-
-            // 6. ResourceActor Modify
-            ResourceActorModify.m_FileTypeFilters = new List<string> { "ResourceActorModify" };
-            int ModifyActorCount = ResourceActorModify.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceActorModify count = {ModifyActorCount}");
-            for (int i = 0; i < ModifyActorCount; i++)
-            {
-                var data = ResourceActorModify.GetResourceAtIndex(i);
-                var resourceActor = ResourceActorDb.GetResource(data.m_Name);
-                if (resourceActor)
-                {
-                    CsvToResource(data.m_Data, resourceActor);
-                }
-            }
-
-            // 7. ResourceActor Inherit
-            ResourceActorInherit.m_FileTypeFilters = new List<string> { "ResourceActorInherit" };
-            int InheritActorCount = ResourceActorInherit.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceActorInherit count = {InheritActorCount}");
-            for (int i = 0; i < InheritActorCount; i++)
-            {
-                var data = ResourceActorInherit.GetResourceAtIndex(i);
-                var lines = data.m_Data.SplitFirstLine();
-                var inhertName = lines[0].Split(',')[1].Trim();
-                var resourceActorInhert = ResourceActorDb.GetResource(inhertName);
-                if (resourceActorInhert)
-                {
-                    ResourceActor resourceActor = UnityEngine.Object.Instantiate(resourceActorInhert);
-                    resourceActor.name = data.m_Name;
-                    CsvToResource(lines[1], resourceActor);
-                    ActorList.Add(resourceActor);
-                    ActorDict.Add(data.m_Name, resourceActor);
-                }
-            }
-
-            // 8. ResourceActorSkin New
-            ResourceActorSkinNew.m_FileTypeFilters = new List<string> { "ResourceActorSkin" };
-            int InheritActorSkinCount = ResourceActorSkinNew.GetNumberOfResources();
-            System.Console.WriteLine($"ResourceActorSkinInherit count = {InheritActorSkinCount}");
-            for (int i = 0; i < InheritActorSkinCount; i++)
-            {
-                var data = ResourceActorSkinNew.GetResourceAtIndex(i);
-                ResourceActorSkin res = ScriptableObject.CreateInstance<ResourceActorSkin>();
-                res.name = data.m_Name;
-                CsvToResource(data.m_Data, res);
-                ActorSkinList.Add(res);
-                ActorSkinDict.Add(data.m_Name, res);
+                crud.Crud();
             }
         }
 
@@ -291,7 +278,7 @@ namespace DD2
             return fieldKeys;
         }
 
-        public static void CsvToResource<T>(string csvText, T resourceObject) where T : UnityEngine.Object
+        public static void CsvToResource<T>(string csvText, T resourceObject) where T : ScriptableObject
         {
             Traverse tResActor = new Traverse(resourceObject);
             var fields = FieldsIncludeBase(resourceObject.GetType());
@@ -347,39 +334,25 @@ namespace DD2
                     {
                         field.SetValue(Activator.CreateInstance(fieldType, array[1]));
                     }
-                    else if (fieldType == typeof(ResourceActor))
+                    else if (typeof(ScriptableObject).IsAssignableFrom(fieldType))
                     {
-                        field.SetValue(ResourceActorDb.GetResource(array[1]));
-                    }
-                    else if (fieldType == typeof(List<ResourceActor>))
-                    {
-                        var list = new List<ResourceActor>();
-                        for (int i = 1; i < array.Length; ++i)
+                        foreach (var crud in CrudList)
                         {
-                            var obj = ResourceActorDb.GetResource(array[i]);
-                            if (obj)
+                            if (crud.GetItemType().IsAssignableFrom(fieldType))
                             {
-                                list.Add(obj);
+                                crud.SetField(field, array[1]);
                             }
                         }
-                        field.SetValue(list);
                     }
-                    else if (typeof(ResourceSkillBase).IsAssignableFrom(fieldType))
+                    else if (fieldType.IsGenericType && typeof(IList).IsAssignableFrom(fieldType) && typeof(ScriptableObject).IsAssignableFrom(fieldType.GenericTypeArguments[0]))
                     {
-                        field.SetValue(ResourceSkillDb.GetResource(array[1]));
-                    }
-                    else if (fieldType == typeof(List<ResourceSkillBase>))
-                    {
-                        var list = new List<ResourceSkillBase>();
-                        for (int i = 1; i < array.Length; ++i)
+                        foreach (var crud in CrudList)
                         {
-                            var obj = ResourceSkillDb.GetResource(array[i]);
-                            if (obj)
+                            if (crud.GetItemType().IsAssignableFrom(fieldType.GenericTypeArguments[0]))
                             {
-                                list.Add(obj);
+                                crud.SetListField(field, array);
                             }
                         }
-                        field.SetValue(list);
                     }
                     System.Console.WriteLine($"{fieldType.Name} {array[0]}={field.GetValue()}");
                 }
@@ -394,10 +367,10 @@ namespace DD2
             return index >= 0 ? obj.name.Substring(0, index) : obj.name;
         }
 
-        public static void ResourceToCsv<T>(T resourceObject, out string csvText) where T : UnityEngine.Object
+        public static void ResourceToCsv<T>(T resourceObject, out string csvText) where T : ScriptableObject
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine($"element_start,{resourceObject.name},{typeof(T).Name}");
+            sb.AppendLine($"element_start,{resourceObject.name},{resourceObject.GetType().Name}");
             Type objectType = resourceObject.GetType();
             Traverse tResActor = new Traverse(resourceObject);
             var fieldKeys = FieldsIncludeBase(objectType);
