@@ -37,6 +37,8 @@ using Assets.Code.Locale;
 using Assets.Code.Locale.Sources;
 using Assets.Code.Combat.Signals;
 using Assets.Code.Combat.Presentation;
+using System.Text;
+using Assets.Code.UI.Items;
 
 namespace DD2
 {
@@ -45,6 +47,7 @@ namespace DD2
     {
         private static ConfigEntry<bool> forceEnableEditorPrefs;
         private static ConfigEntry<bool> resourceExport;
+        private static ConfigEntry<bool> animParamExport;
 
         const string PluginGroupName = "_PLUGIN_BINARIZER_";
         public static readonly TextBasedEditorPrefsBoolType UNLOCK_ALL_SKILLS = new TextBasedEditorPrefsBoolType("UNLOCK_ALL_SKILLS".ToLowerInvariant(), false, "Enables all skills at beginning.", PluginGroupName, true);
@@ -63,9 +66,10 @@ namespace DD2
         static List<string> ModNames = new List<string>();
 
         public void OnRegister(BaseUnityPlugin plugin)
-        {       
+        {
             forceEnableEditorPrefs = plugin.Config.Bind("General", "Force Enable Editor Prefs", true, "Force -enableEditorPrefs, no need to set command line args.");
             resourceExport = plugin.Config.Bind("General", "Export Official Resources", false, "Export Official Resources.");
+            animParamExport = plugin.Config.Bind("General", "Export Animator Parameters", false, "Export Animator Parameters.");
 
             // Mod support: prepare directories and add external resources
             if (Directory.Exists(ModRootPath))
@@ -351,7 +355,7 @@ namespace DD2
             var m_SpawnedActor = Traverse.Create(__instance).Field("m_SpawnedActor").GetValue<ActorBhv>();
             var actorDataId = m_SpawnedActor.ActorInstance.ActorDataId;
             var res = SingletonMonoBehaviour<CampaignBhv>.Instance.ResourceDatabaseActors.GetResource(actorDataId);
-            var ArtList = new List<IResourceActorArt> { res }; 
+            var ArtList = new List<IResourceActorArt> { res };
             var dbSkin = Traverse.Create(SingletonMonoBehaviour<ActorCreateGameObjectBhv>.Instance).Field("m_ResourceDatabaseActorSkins").GetValue<ResourceDatabaseActorSkins>();
             var skins = dbSkin.GetSkinsForActor(res);
             ArtList.AddRange(skins);
@@ -381,6 +385,31 @@ namespace DD2
                 __instance.CharacterRoot.localScale *= ExternalResourceManager.ArtScaleDict[resourceActorAccessor.name];
             }
             return true;
+        }
+
+        // Export animator params
+        [HarmonyPostfix, HarmonyPatch(typeof(ActorBhv), "SetClassState")]
+        public static void ExportAnimatorParams(ActorBhv __instance, ref IResourceActorAccessor resourceActorAccessor)
+        {
+            if (animParamExport.Value)
+            {
+                Animator animator = Traverse.Create(__instance).Field("m_CurrentAnimator").GetValue<Animator>();
+                if (animator)
+                {
+                    var exportDir = Path.Combine(Environment.CurrentDirectory, "AnimParamExport");
+                    if (!Directory.Exists(exportDir))
+                        Directory.CreateDirectory(exportDir);
+                    string path = Path.Combine(exportDir, resourceActorAccessor.name + ".txt");
+                    StringBuilder sb = new StringBuilder();
+                    var list = new List<AnimatorControllerParameter>(animator.parameters);
+                    list.Sort((a, b) => a.name.CompareTo(b.name));
+                    foreach (var param in list)
+                    {
+                        sb.AppendLine($"{param.name} [{param.type}]");
+                    }
+                    File.WriteAllText(path, sb.ToString());
+                }
+            }
         }
 
         /// <summary>
@@ -967,7 +996,24 @@ namespace DD2
         [HarmonyPostfix, HarmonyPatch(typeof(ResourceDatabaseObject<ScriptableObject>), "OnEnable")]
         public static void PostDatabase(ref ScriptableObject __instance)
         {
-           ExternalResourceManager.AddResourceDatabase(__instance);
+            ExternalResourceManager.AddResourceDatabase(__instance);
+        }
+
+        /// <summary>
+        /// Hack Item Image
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(InventoryUiUtils), "GetItemIconPrefab", new Type[] { typeof(ResourceDatabaseItem), typeof(ItemDefinition) })]
+        public static void HackItemImage(ref ItemDefinition item, ref GameObject __result)
+        {
+            if (__result)
+            {
+                var image = __result.GetComponentInChildren<Image>();
+                if (image)
+                {
+                    if (ExternalResourceManager.ExternalSprites.ContainsKey(item.m_id))
+                        image.sprite = ExternalResourceManager.ExternalSprites[item.m_id];
+                }
+            }
         }
     }
 }

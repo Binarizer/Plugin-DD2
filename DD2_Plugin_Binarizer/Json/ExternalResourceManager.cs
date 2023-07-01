@@ -13,6 +13,7 @@ using Assets.Code.Utils.Serialization;
 using Assets.Code.Resource;
 using Assets.Code.Gfx;
 using Assets.Code.Actor;
+using System.Xml.Linq;
 
 namespace DD2
 {
@@ -34,7 +35,6 @@ namespace DD2
         public ScriptableObjectTextCrud(string name, ResourceDatabaseObject<T> db)
         {
             DataName = name;
-            System.Console.WriteLine($"CrudName = {name}, DbType = {typeof(T).Name}");
             DbReference = db;
             var tDb = Traverse.Create(db);
             ResourceList = tDb.Field("m_Resources").GetValue<List<T>>();
@@ -64,6 +64,8 @@ namespace DD2
 
         public void Crud()
         {
+            System.Console.WriteLine($"Crud Name = {DataName}, DbType = {typeof(T).Name}");
+
             // Apply Modify
             DbTextModify.m_FileTypeFilters = new List<string> { DataName + "Modify" };
             int modifyCount = DbTextModify.GetNumberOfResources();
@@ -92,7 +94,8 @@ namespace DD2
                 {
                     T scriptableObject = UnityEngine.Object.Instantiate(resourceInhert);
                     scriptableObject.name = data.m_Name;
-                    ExternalResourceManager.CsvToResource(lines[1], scriptableObject);
+                    if (lines.Length > 1)
+                        ExternalResourceManager.CsvToResource(lines[1], scriptableObject);
                     ResourceList.Add(scriptableObject);
                     ResourceDict.Add(data.m_Name, scriptableObject);
                 }
@@ -156,7 +159,7 @@ namespace DD2
         /// <summary>
         /// External Sprite Container
         /// </summary>
-        readonly static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
+        readonly public static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
 
         /// <summary>
         /// Scale Modifier
