@@ -970,10 +970,10 @@ namespace DD2
         }
 
         /// <summary>
-        /// Hack Item Image
+        /// Hack Item Image 1
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(InventoryUiUtils), "GetItemIconPrefab", new Type[] { typeof(ResourceDatabaseItem), typeof(ItemDefinition) })]
-        public static void HackItemImage(ref ItemDefinition item, ref GameObject __result)
+        public static void HackItemImage1(ref ItemDefinition item, ref GameObject __result)
         {
             if (__result)
             {
@@ -982,6 +982,23 @@ namespace DD2
                 {
                     if (ExternalResourceManager.ExternalSprites.ContainsKey(item.m_id))
                         image.sprite = ExternalResourceManager.ExternalSprites[item.m_id];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Hack Item Image 2
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(InventoryUiUtils), "GetItemIconPrefab", new Type[] { typeof(ResourceDatabaseItem), typeof(IReadOnlyItemInstance) })]
+        public static void HackItemImage2(ref IReadOnlyItemInstance item, ref GameObject __result)
+        {
+            if (__result)
+            {
+                var image = __result.GetComponentInChildren<Image>();
+                if (image)
+                {
+                    if (ExternalResourceManager.ExternalSprites.ContainsKey(item.GetItemDefinition().m_id))
+                        image.sprite = ExternalResourceManager.ExternalSprites[item.GetItemDefinition().m_id];
                 }
             }
         }
