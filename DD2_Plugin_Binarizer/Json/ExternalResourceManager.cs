@@ -13,7 +13,6 @@ using Assets.Code.Utils.Serialization;
 using Assets.Code.Resource;
 using Assets.Code.Gfx;
 using Assets.Code.Actor;
-using System.Xml.Linq;
 
 namespace DD2
 {

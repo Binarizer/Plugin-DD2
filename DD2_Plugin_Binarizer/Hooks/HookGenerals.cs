@@ -39,6 +39,7 @@ using Assets.Code.Combat.Signals;
 using Assets.Code.Combat.Presentation;
 using System.Text;
 using Assets.Code.UI.Items;
+using Assets.Code.Combat;
 
 namespace DD2
 {
@@ -239,55 +240,19 @@ namespace DD2
         }
 
         /// <summary>
-        /// 暂时不读取骨骼位置：判空1
+        /// 读取骨骼位置：找头
         /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(ActorBhv), "CurrentBoneRemapping", MethodType.Getter)]
-        public static bool FixEmpty(ref ActorBhv __instance, ref BoneRemapping __result)
+        [HarmonyPostfix, HarmonyPatch(typeof(BoneRemapping), "GetBone")]
+        public static void FixEmptyBone(ref BoneRemapping __instance, ref Transform __result)
         {
-            if (Traverse.Create(__instance).Field("m_CurrentBoneRemapping").GetValue() == null)
+            if (__result == null)
             {
-                __result = null;
-                return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// 暂时不读取骨骼位置：判空2
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(TimelinePropertyMapBhv), "UpdateMutualBindingMaps")]
-        public static bool FixEmpty2(ref TimelinePropertyMapBhv __instance, ref ActorBhv actorBhv)
-        {
-            var m_MutualBindingMaps = Traverse.Create(__instance).Field("m_MutualBindingMaps").GetValue<Dictionary<string, TimelinePropertyMapBhv>>();
-            foreach (GameObject gameObject in actorBhv.GetArtStates())
-            {
-                TimelinePropertyMapBhv componentInChildren = gameObject.GetComponentInChildren<TimelinePropertyMapBhv>();
-                var tchild = Traverse.Create(componentInChildren);
-                var MyBoneRemapping = tchild.Property("MyBoneRemapping").GetValue<BoneRemapping>();
-                if (!(componentInChildren == null) && !(componentInChildren == __instance))
+                __result = __instance.transform.Search(t => t.name.ToLower().Contains("head"));
+                if (__result == null)
                 {
-                    foreach (ResourceActor resourceActor in actorBhv.GetResourceActorsForArtState(gameObject))
-                    {
-                        if (m_MutualBindingMaps.ContainsKey(resourceActor.name))
-                        {
-                            Debug.LogWarning("Two TimelinePropertyMapBhv with the same " + resourceActor.name + " spawned under the same character, this might cause some binding issues", componentInChildren);
-                        }
-                        else
-                        {
-                            m_MutualBindingMaps.Add(resourceActor.name, componentInChildren);
-                            if (MyBoneRemapping && MyBoneRemapping.name != null)
-                            {
-                                if (resourceActor.name != MyBoneRemapping.name && !m_MutualBindingMaps.ContainsKey(MyBoneRemapping.name))
-                                {
-                                    m_MutualBindingMaps.Add(MyBoneRemapping.name, componentInChildren);
-                                }
-                            }
-                        }
-                    }
-                    tchild.Method("Initialize", false).GetValue();
+                    __result = __instance.transform;
                 }
             }
-            return false;
         }
 
         /// <summary>
@@ -387,10 +352,15 @@ namespace DD2
             return true;
         }
 
-        // Export animator params
+        // BoneRemapping fix; Export animator params; 
         [HarmonyPostfix, HarmonyPatch(typeof(ActorBhv), "SetClassState")]
         public static void ExportAnimatorParams(ActorBhv __instance, ref IResourceActorAccessor resourceActorAccessor)
         {
+            if (Traverse.Create(__instance).Field("m_CurrentBoneRemapping").GetValue() == null)
+            {
+                var remapping = __instance.gameObject.AddComponent<BoneRemapping>();
+                Traverse.Create(__instance).Field("m_CurrentBoneRemapping").SetValue(remapping);
+            }
             if (animParamExport.Value)
             {
                 Animator animator = Traverse.Create(__instance).Field("m_CurrentAnimator").GetValue<Animator>();
