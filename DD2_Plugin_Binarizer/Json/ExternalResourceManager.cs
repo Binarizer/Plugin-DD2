@@ -161,6 +161,11 @@ namespace DD2
         readonly public static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
 
         /// <summary>
+        /// External Sprite Container
+        /// </summary>
+        readonly public static Dictionary<string, GameObject> ItemOverrideObject = new Dictionary<string, GameObject>();
+
+        /// <summary>
         /// Scale Modifier
         /// </summary>
         public static Dictionary<string, float> ArtScaleDict = new Dictionary<string, float>();

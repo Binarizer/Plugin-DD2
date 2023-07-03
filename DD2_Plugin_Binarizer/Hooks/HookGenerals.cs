@@ -970,20 +970,40 @@ namespace DD2
         }
 
         /// <summary>
+        /// Hack Item Image Implement
+        /// </summary>
+        static void HackItemImage(ref GameObject __result, string itemId)
+        {
+            if (__result)
+            {
+                if (ExternalResourceManager.ExternalSprites.ContainsKey(itemId))
+                {
+                    if (ExternalResourceManager.ItemOverrideObject.ContainsKey(itemId))
+                    {
+                        __result = ExternalResourceManager.ItemOverrideObject[itemId];
+                    }
+                    else
+                    {
+                        var inst = GameObject.Instantiate(__result);
+                        ExternalResourceManager.ItemOverrideObject.Add(itemId, inst);
+                        var image = inst.GetComponentInChildren<Image>();
+                        if (image)
+                        {
+                            image.sprite = ExternalResourceManager.ExternalSprites[itemId];
+                        }
+                        __result = inst;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Hack Item Image 1
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(InventoryUiUtils), "GetItemIconPrefab", new Type[] { typeof(ResourceDatabaseItem), typeof(ItemDefinition) })]
         public static void HackItemImage1(ref ItemDefinition item, ref GameObject __result)
         {
-            if (__result)
-            {
-                var image = __result.GetComponentInChildren<Image>();
-                if (image)
-                {
-                    if (ExternalResourceManager.ExternalSprites.ContainsKey(item.m_id))
-                        image.sprite = ExternalResourceManager.ExternalSprites[item.m_id];
-                }
-            }
+            HackItemImage(ref __result, item.m_id);
         }
 
         /// <summary>
@@ -992,15 +1012,7 @@ namespace DD2
         [HarmonyPostfix, HarmonyPatch(typeof(InventoryUiUtils), "GetItemIconPrefab", new Type[] { typeof(ResourceDatabaseItem), typeof(IReadOnlyItemInstance) })]
         public static void HackItemImage2(ref IReadOnlyItemInstance item, ref GameObject __result)
         {
-            if (__result)
-            {
-                var image = __result.GetComponentInChildren<Image>();
-                if (image)
-                {
-                    if (ExternalResourceManager.ExternalSprites.ContainsKey(item.GetItemDefinition().m_id))
-                        image.sprite = ExternalResourceManager.ExternalSprites[item.GetItemDefinition().m_id];
-                }
-            }
+            HackItemImage(ref __result, item.GetItemDefinition().m_id);
         }
     }
 }
