@@ -13,6 +13,7 @@ using Assets.Code.Utils.Serialization;
 using Assets.Code.Resource;
 using Assets.Code.Gfx;
 using Assets.Code.Actor;
+using static Assets.Code.Debugging.ReorderableListTestBhv;
 
 namespace DD2
 {
@@ -36,8 +37,8 @@ namespace DD2
             DataName = name;
             DbReference = db;
             var tDb = Traverse.Create(db);
-            ResourceList = tDb.Field("m_Resources").GetValue<List<T>>();
-            ResourceDict = tDb.Field("m_ResourcesDictionary").GetValue<Dictionary<string, T>>();
+            ResourceList = tDb.Field("m_NewResources").GetValue<List<AssetReferenceT<T>>>();
+            ResourceDict = tDb.Field("m_ResourcesDictionary").GetValue<Dictionary<string, AssetReferenceT<T>>>();
             DbTextModify = ScriptableObject.CreateInstance<ResourceDatabaseText>();
             DbTextInherit = ScriptableObject.CreateInstance<ResourceDatabaseText>();
             DbTextNew = ScriptableObject.CreateInstance<ResourceDatabaseText>();
@@ -72,7 +73,7 @@ namespace DD2
             for (int i = 0; i < modifyCount; i++)
             {
                 var data = DbTextModify.GetResourceAtIndex(i);
-                var resourceSkill = DbReference.GetResource(data.m_Name);
+                var resourceSkill = DbReference.GetResource(data.m_Name, true, false);
                 if (resourceSkill)
                 {
                     ExternalResourceManager.CsvToResource(data.m_Data, resourceSkill);
@@ -88,15 +89,14 @@ namespace DD2
                 var data = DbTextInherit.GetResourceAtIndex(i);
                 var lines = data.m_Data.SplitFirstLine();
                 var inhertName = lines[0].Split(',')[1].Trim();
-                var resourceInhert = DbReference.GetResource(inhertName);
+                var resourceInhert = DbReference.GetResource(inhertName, true, false);
                 if (resourceInhert)
                 {
                     T scriptableObject = UnityEngine.Object.Instantiate(resourceInhert);
                     scriptableObject.name = data.m_Name;
                     if (lines.Length > 1)
                         ExternalResourceManager.CsvToResource(lines[1], scriptableObject);
-                    ResourceList.Add(scriptableObject);
-                    ResourceDict.Add(data.m_Name, scriptableObject);
+                    AppendRedirect(data.m_Name, scriptableObject);
                 }
             }
 
@@ -110,9 +110,16 @@ namespace DD2
                 T scriptableObject = ScriptableObject.CreateInstance<T>();
                 scriptableObject.name = data.m_Name;
                 ExternalResourceManager.CsvToResource(data.m_Data, scriptableObject);
-                ResourceList.Add(scriptableObject);
-                ResourceDict.Add(data.m_Name, scriptableObject);
+                AppendRedirect(data.m_Name, scriptableObject);
             }
+        }
+        private void AppendRedirect(string name, ScriptableObject so)
+        {
+            string guid = DataName + "::" + name;   // unique redirect name
+            ExternalResourceManager.SoRedirect.Add(guid, so);
+            AssetReferenceT<T> assetReference = new AssetReferenceT<T>(guid);
+            ResourceList.Add(assetReference);
+            ResourceDict.Add(name, assetReference);
         }
 
         public void SetField(Traverse field, string strParam)
@@ -141,8 +148,8 @@ namespace DD2
 
         string DataName = null;
         ResourceDatabaseObject<T> DbReference = null;
-        List<T> ResourceList = null;
-        Dictionary<string, T> ResourceDict = null;
+        List<AssetReferenceT<T>> ResourceList = null;
+        Dictionary<string, AssetReferenceT<T>> ResourceDict = null;
         ResourceDatabaseText DbTextModify = null;
         ResourceDatabaseText DbTextInherit = null;
         ResourceDatabaseText DbTextNew = null;
@@ -151,9 +158,14 @@ namespace DD2
     public static class ExternalResourceManager
     {
         /// <summary>
-        /// External Sprite Container
+        /// External Crud Container
         /// </summary>
         readonly static List<IScriptableObjectTextCrud> CrudList = new List<IScriptableObjectTextCrud>();
+
+        /// <summary>
+        /// External ScriptableObject Container
+        /// </summary>
+        readonly public static Dictionary<string, ScriptableObject> SoRedirect = new Dictionary<string, ScriptableObject>();
 
         /// <summary>
         /// External Sprite Container
@@ -161,9 +173,14 @@ namespace DD2
         readonly public static Dictionary<string, Sprite> ExternalSprites = new Dictionary<string, Sprite>();
 
         /// <summary>
-        /// External Sprite Container
+        /// External GameObject Container
         /// </summary>
         readonly public static Dictionary<string, GameObject> ItemOverrideObject = new Dictionary<string, GameObject>();
+
+        /// <summary>
+        /// External FMOD Audio Container
+        /// </summary>
+        readonly public static Dictionary<string, FMOD.GUID> PathToFmodGuid = new Dictionary<string, FMOD.GUID>();
 
         /// <summary>
         /// Scale Modifier
@@ -227,6 +244,17 @@ namespace DD2
             }
         }
 
+        public static bool RedirectAssetReference(string guid, out ScriptableObject result)
+        {
+            result = null;
+            if ( SoRedirect.ContainsKey(guid))
+            {
+                result = SoRedirect[guid];
+                return true;
+            }
+            return false;
+        }
+
         public static void AddResourceDatabase(ScriptableObject db)
         {
             Type typeArg = db.GetType().BaseType.GetGenericArguments()[0];
@@ -235,7 +263,7 @@ namespace DD2
             if (name.EndsWith("Base"))
                 name = name.Substring(0, name.Length - 4);
 
-            System.Console.WriteLine($"Database {name}, Resource Count = {Traverse.Create(db).Field("m_Resources").Property("Count").GetValue()}");
+            System.Console.WriteLine($"Database {name}, Resource Count = {Traverse.Create(db).Field("m_NewResources").Property("Count").GetValue()}");
 
             CrudList.Add(Activator.CreateInstance(typeCrud, name, db) as IScriptableObjectTextCrud);
         }
@@ -301,6 +329,10 @@ namespace DD2
                 else if (key == "Audio")
                 {
                     AudioPathDict[array[1]] = array[2];
+                }
+                else if (key == "FMOD")
+                {
+                    PathToFmodGuid[array[1]] = FMOD.GUID.Parse(array[2]);
                 }
                 else if (fields.Contains(key))
                 {

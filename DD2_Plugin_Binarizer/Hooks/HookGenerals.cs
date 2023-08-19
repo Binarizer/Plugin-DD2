@@ -40,6 +40,8 @@ using Assets.Code.Combat.Presentation;
 using System.Text;
 using Assets.Code.UI.Items;
 using Assets.Code.Combat;
+using FMODUnity;
+using Assets.Code.Audio.Banks;
 
 namespace DD2
 {
@@ -473,8 +475,8 @@ namespace DD2
             {
                 SingletonMonoBehaviour<InputSystemBhv>.Instance.SetInputActionMapEnabled(mapName, false);
             }
-            SingletonMonoBehaviour<InputSystemBhv>.Instance.GenerateInputAction("ChangeCharacter", "Space", "alt", "UI");
-            SingletonMonoBehaviour<InputSystemBhv>.Instance.GenerateInputAction("ChangePath", "Space", "", "UI");
+            SingletonMonoBehaviour<InputSystemBhv>.Instance.GenerateInputAction("ChangeCharacter", "Space", "alt", "UI", "Keyboard");
+            SingletonMonoBehaviour<InputSystemBhv>.Instance.GenerateInputAction("ChangePath", "Space", "", "UI", "Keyboard");
             foreach (string mapName2 in inputActionMapNames)
             {
                 SingletonMonoBehaviour<InputSystemBhv>.Instance.SetInputActionMapEnabled(mapName2, true);
@@ -502,7 +504,7 @@ namespace DD2
         {
             if (Traverse.Create(__instance).Field("m_inputSource").GetValue() == null)
                 return;
-            if (__instance.GetPointerValues().m_rightButton.m_wasPressed)
+            if (InputSystemBhv.GetPointerValues().m_rightButton.m_wasPressed)
             {
                 System.Console.WriteLine("Mouse Right!");
 
@@ -766,6 +768,11 @@ namespace DD2
             for (int i = 0; i < resourceActors.GetNumberOfResources(); i++)
             {
                 ResourceActor actorResource = resourceActors.GetResourceAtIndex(i);
+                if (actorResource == null)
+                {
+                    System.Console.WriteLine($"no ActorResource at index {i}");
+                    continue;
+                }
                 System.Console.WriteLine($"try add {actorResource.name}");
                 int added = entries.Count(entry => entry.ActorClassId == actorResource.name);
 
@@ -961,6 +968,20 @@ namespace DD2
 
 
         /// <summary>
+        /// 重定向AssetReference
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(AssetReference), "Asset", MethodType.Getter)]
+        public static bool AssetReferenceRedirect(ref AssetReference __instance, ref UnityEngine.Object __result)
+        {
+            if (ExternalResourceManager.RedirectAssetReference(__instance.AssetGUID, out ScriptableObject so))
+            {
+                __result = so;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Add ResourceDatabase
         /// </summary>
         [HarmonyPostfix, HarmonyPatch(typeof(ResourceDatabaseObject<ScriptableObject>), "OnEnable")]
@@ -1013,6 +1034,56 @@ namespace DD2
         public static void HackItemImage2(ref IReadOnlyItemInstance item, ref GameObject __result)
         {
             HackItemImage(ref __result, item.GetItemDefinition().m_id);
+        }
+
+        /// <summary>
+        /// Audio FMOD
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(AudioEventUtils), "GetEventGuid", new Type[] { typeof(string) })]
+        public static bool RedirectFmodGuid(ref FMOD.GUID __result, ref string eventName)
+        {
+            if (ExternalResourceManager.PathToFmodGuid.ContainsKey(eventName))
+            {
+                __result = ExternalResourceManager.PathToFmodGuid[eventName];
+                var desc = RuntimeManager.GetEventDescription(__result);
+                Debug.Log($"FMOD override {eventName} = {__result}, desc = {desc.isValid()}");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Audio FMOD Debug
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(AudioBankMgr), "Initialize")]
+        public static void PrintBanks(ref AudioBankMgr __instance)
+        {
+            var alwaysLoaded = Traverse.Create(__instance).Field("m_alwaysLoadedBanks").GetValue<List<BankData>>();
+            foreach (var bankData in alwaysLoaded)
+            {
+                Debug.Log($"FMOD bank = {bankData.m_name}");
+                bankData.m_bank.getEventList(out var eventDescriptions);
+                foreach(var eventDescription in eventDescriptions)
+                {
+                    eventDescription.getLength(out int length);
+                    eventDescription.getID(out var id);
+                    eventDescription.getPath(out var path);
+                    Debug.Log($"eventName = {path}, length={length}, GUID = {id}");
+                }
+            }
+            var masters = Traverse.Create(__instance).Field("m_masterBanks").GetValue<List<BankData>>();
+            foreach (var bankData in masters)
+            {
+                Debug.Log($"FMOD bank = {bankData.m_name}");
+                bankData.m_bank.getEventList(out var eventDescriptions);
+                foreach (var eventDescription in eventDescriptions)
+                {
+                    eventDescription.getLength(out int length);
+                    eventDescription.getID(out var id);
+                    eventDescription.getPath(out var path);
+                    Debug.Log($"eventName = {path}, length={length}, GUID = {id}");
+                }
+            }
         }
     }
 }
