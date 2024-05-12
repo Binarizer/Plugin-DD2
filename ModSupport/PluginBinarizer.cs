@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using HarmonyLib;
 using BepInEx;
 
-namespace DD2
+namespace Millennia
 {
-    [BepInPlugin("binarizer.plugin.dd2", "功能合集 by Binarizer", "1.4.2")]
+    [BepInPlugin("binarizer.plugin.millennia", "plugin by Binarizer", "1.0.0")]
     public class PluginBinarizer : BaseUnityPlugin
     {
         void RegisterHook(IHook hook)
@@ -15,12 +15,13 @@ namespace DD2
             hooks.Add(hook);
         }
 
-        private List<IHook> hooks = new List<IHook>();
+        private readonly List<IHook> hooks = new List<IHook>();
 
         void Awake()
         {
             Console.WriteLine("Main Awake: Initialize Hooks");
-            RegisterHook(new HookGenerals());
+            RegisterHook(new HookMods());
+            RegisterHook(new HookGeneral());
         }
 
         void Start()
@@ -30,7 +31,7 @@ namespace DD2
 
         void Update()
         {
-            Console.WriteLine("Main Update: ");
+            //Console.WriteLine("Main Update: ");
             foreach (IHook hook in hooks)
             {
                 hook.OnUpdate();
