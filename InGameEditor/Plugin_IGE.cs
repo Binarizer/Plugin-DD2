@@ -1,13 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using BepInEx;
-using CPrompt;
 using HarmonyLib;
 using UnityEngine;
 
-namespace Millennia_IGE
+namespace Mortal_Exporter
 {
-    [BepInPlugin("plugins.Millennia.IGE", "In Game Editor", "0.0.0.1")]
+    [BepInPlugin("plugins.Mortal.IGE", "LocAndCsvExporter", "0.0.0.1")]
     public class Plugin_IGE : BaseUnityPlugin
     {
         void Start()
@@ -30,7 +29,7 @@ namespace Millennia_IGE
                 {
                     selectedTile = AInputHandler.Instance.SelectedLocation;
                     selectedCity = AInputHandler.Instance.SelectedCity;
-                    if (!selectedCity)
+                    if (!selectedCity && selectedTile)
                     {
                         selectedCity = selectedTile.GetCity()?.GetTile();
                     }
@@ -222,6 +221,10 @@ namespace Millennia_IGE
                     }
                 case 2:
                     {
+                        if (!selectedTile)
+                        {
+                            break;
+                        }
                         var selectedUnits = selectedTile.GetUnits(AGame.cUnitLayerAll);
                         foreach (var unit in selectedUnits)
                         {
@@ -250,8 +253,7 @@ namespace Millennia_IGE
                     }
                 case 3:
                     {
-                        bool flag18 = selectedTile != null;
-                        if (flag18)
+                        if (selectedTile)
                         {
                             AEntityTile tile = selectedTile.GetTile();
                             string bonusStr = (tile != null) ? ((tile.GetDisplayName() == "") ? "无" : tile.GetDisplayName()) : "无";

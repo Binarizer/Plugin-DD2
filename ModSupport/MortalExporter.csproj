@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{696E35DE-A404-483A-AAD1-5B93D65AE595}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Functional</RootNamespace>
+    <AssemblyName>FunctionalPlugin_Binarizer</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\BepInEx\Plugins\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <LangVersion>7.1</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\BepInEx\Plugins\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <LangVersion>7.1</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Hooks\HookMods.cs" />
+    <Compile Include="Hooks\IHook.cs" />
+    <Compile Include="Hooks\HookGenerals.cs" />
+    <Compile Include="PluginBinarizer.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\BepInEx\core\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Core">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\BepInEx\core\BepInEx.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.Mono">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\BepInEx\core\BepInEx.Unity.Mono.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Cinemachine">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Cinemachine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DOTween">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\DOTween.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DOTween.Modules">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\DOTween.Modules.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="FlatKit.Runtime">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\FlatKit.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Fungus">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Fungus.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="LeanCommon">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\LeanCommon.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="LeanLocalization">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\LeanLocalization.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="LeanLocalization.TMP">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\LeanLocalization.TMP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Security">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mono.Security.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mortal.Battle">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Battle.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mortal.Combat">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Combat.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mortal.Core">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mortal.Free">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Free.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mortal.Story">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Story.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="Unity.InputSystem">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Unity.InputSystem.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

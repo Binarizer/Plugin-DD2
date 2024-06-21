@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using HarmonyLib;
 using BepInEx;
+using BepInEx.Unity.Mono;
 
-namespace Millennia
+namespace Mortal
 {
-    [BepInPlugin("binarizer.plugin.millennia", "plugin by Binarizer", "1.0.0")]
+    [BepInPlugin("binarizer.plugin.mortal", "plugin by Binarizer", "1.0.0")]
     public class PluginBinarizer : BaseUnityPlugin
     {
         void RegisterHook(IHook hook)
