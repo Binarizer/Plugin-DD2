@@ -6,9 +6,11 @@ using Ideafixxxer.CsvParser;
 using MoonSharp.Interpreter;
 using Mortal.Core;
 using Mortal.Story;
+using OBB.Framework.Attributes;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 
 namespace Mortal
@@ -26,6 +28,8 @@ namespace Mortal
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
         static Dictionary<string, string> luaFileTable = new Dictionary<string, string>();
         static Dictionary<string, string> stringTable = new Dictionary<string, string>();
+        static Dictionary<string, string> portraitTable = new Dictionary<string, string>();
+        static Dictionary<string, Sprite> portraitCache = new Dictionary<string, Sprite>();
 
         public void OnRegister(BaseUnityPlugin plugin)
         {
@@ -58,6 +62,17 @@ namespace Mortal
                 Debug.Log($"ModSupport: Reading StringTable {stringTablePath}");
                 int lines = ReadStringTable(File.ReadAllText(stringTablePath));
                 Debug.Log($"ModSupport: Finish reading {lines} lines.");
+            }
+
+            // 外部读取头像
+            string portraitDir = Path.Combine(modPath, "Portraits");
+            if (Directory.Exists(portraitDir))
+            {
+                foreach (string file in Directory.EnumerateFiles(modPath, "*.png", SearchOption.AllDirectories))
+                {
+                    Debug.Log($"ModSupport: Add portrait file {file}");
+                    portraitTable.Add(Path.GetFileNameWithoutExtension(file), file);
+                }
             }
         }
 
@@ -115,6 +130,80 @@ namespace Mortal
             Debug.Log($"ModSupport: Find external string {key}");
             __result = stringTable[key];
             return false;
+        }
+
+        static Dictionary<PortraitType, string> portraitTypeToString = null;
+        /// <summary>
+        /// 重定向头像
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterData), "GetPortraitSprite", new Type[] { typeof(PortraitType) })]
+        public static bool GetPortraitSprite_Redirect(ref StoryCharacterData __instance, ref Sprite __result, PortraitType type)
+        {
+            if (portraitTypeToString == null)
+            {
+                // 构造头像类型到string的映射
+                portraitTypeToString = new Dictionary<PortraitType, string>();
+                foreach (PortraitType value in Enum.GetValues(typeof(PortraitType)))
+                {
+                    FieldInfo field = typeof(PortraitType).GetField(value.ToString());
+                    var stringValueAttribute = Attribute.GetCustomAttribute(field, typeof(StringValueAttribute)) as StringValueAttribute;
+                    portraitTypeToString.Add(value, stringValueAttribute.StringValue);
+                }
+            }
+
+            string portraitTypeName = portraitTypeToString[type];
+            string portraitName = $"{__instance.Id}_{portraitTypeName}";
+            return ReplacePortrait(portraitName, ref __result);
+        }
+
+        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterData), "DefaultPortrait", MethodType.Getter)]
+        public static bool DefaultPortrait_Redirect(ref StoryCharacterData __instance, ref Sprite __result)
+        {
+            string portraitName = $"{__instance.Id}";
+            return ReplacePortrait(portraitName, ref __result);
+        }
+
+        public static bool ReplacePortrait(string portraitName, ref Sprite __result)
+        {
+            if (portraitCache.ContainsKey(portraitName))
+            {
+                Debug.Log($"Find cached portrait {portraitName}");
+                __result = portraitCache[portraitName];
+                return false;
+            }
+
+            if (portraitTable.ContainsKey(portraitName))
+            {
+                Debug.Log($"Find mod portrait {portraitName}");
+                var sprite = LoadSprite(portraitTable[portraitName]);
+                if (sprite != null)
+                {
+                    sprite.name = portraitName;
+                    portraitCache.Add(portraitName, sprite);
+                    __result = sprite;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static Sprite LoadSprite(string FilePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
+        {
+            Texture2D Tex2D;
+            byte[] FileData;
+
+            if (File.Exists(FilePath))
+            {
+                FileData = File.ReadAllBytes(FilePath);
+                Tex2D = new Texture2D(2, 2);
+                if (Tex2D.LoadImage(FileData))
+                {
+                    Sprite NewSprite = Sprite.Create(Tex2D, new Rect(0, 0, Tex2D.width, Tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                    return NewSprite;
+                }
+            }
+            return null;
         }
 
     }

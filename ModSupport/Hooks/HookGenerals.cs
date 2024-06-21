@@ -1,6 +1,10 @@
-﻿using BepInEx.Unity.Mono;
+﻿using BepInEx.Configuration;
+using BepInEx.Unity.Mono;
+using HarmonyLib;
 using Lean.Localization;
 using Mortal.Core;
+using Mortal.Story;
+using OBB.Framework.Attributes;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,6 +18,7 @@ namespace Mortal
 {
     public class HookGeneral : IHook
     {
+        private static ConfigEntry<bool> exportEnable;
         public IEnumerable<Type> GetRegisterTypes()
         {
             return new Type[] { GetType() };
@@ -22,25 +27,38 @@ namespace Mortal
 
         public void OnRegister(BaseUnityPlugin plugin)
         {
+            exportEnable = plugin.Config.Bind("Enable Export", "Enable Export", false, "Enable Export");
         }
 
         private bool f4 = false;
+        private bool f5 = false;
 
         public void OnUpdate()
         {
-            //if (Keyboard.current.f3Key.IsPressed())
-            //{
-            //    Debug.Log("F3 is pressed");
-            //    ExportDataTables();
-            //}
-
-            bool f4_pressed = Keyboard.current.f4Key.IsPressed();
-            if (f4_pressed && !f4)
+            if (exportEnable.Value)
             {
-                Debug.Log("F4 is pressed");
-                ExportLocalizations();
+                //if (Keyboard.current.f3Key.IsPressed())
+                //{
+                //    Debug.Log("F3 is pressed");
+                //    ExportDataTables();
+                //}
+
+                bool f4_pressed = Keyboard.current.f4Key.IsPressed();
+                if (f4_pressed && !f4)
+                {
+                    Debug.Log("F4 is pressed");
+                    ExportLocalizations();
+                }
+                f4 = f4_pressed;
+
+                bool f5_pressed = Keyboard.current.f5Key.IsPressed();
+                if (f5_pressed && !f5)
+                {
+                    Debug.Log("F5 is pressed");
+                    ExportPortraits();
+                }
+                f5 = f5_pressed;
             }
-            f4 = f4_pressed;
         }
 
         public static void ExportLocalizations()
@@ -52,6 +70,87 @@ namespace Mortal
                 stream.WriteLine($"{pair.Key},\"{pair.Value.Data}\"");
             }
             stream.Close();
+        }
+
+        static bool exportingPortaits = false;
+        static string exportPortraitDir = null;
+        public static void ExportPortraits()
+        {
+            exportingPortaits = true;
+            exportPortraitDir = "./Portraits/";
+            if (!Directory.Exists(exportPortraitDir))
+                Directory.CreateDirectory(exportPortraitDir);
+            var characterConfig = Traverse.Create(CharacterPlaceholder.Instance).Field("_config").GetValue<StoryCharacterConfig>();
+            foreach(var characterData in characterConfig.List)
+            {
+                Debug.Log($"Export {characterData.Id}");
+                if (characterData.DefaultPortrait)
+                {
+                    string defaultFileName = $"{characterData.Id}.png";
+                    ExportPortrait(defaultFileName, characterData.DefaultPortrait);
+                }
+                characterData.GetPortraitList();
+            }
+            exportingPortaits = false;
+        }
+
+        static Texture2D MakeReadable(Texture2D source)
+        {
+            RenderTexture renderTex = RenderTexture.GetTemporary(
+                        source.width,
+                        source.height,
+                        0,
+                        RenderTextureFormat.Default,
+                        RenderTextureReadWrite.Linear);
+
+            Graphics.Blit(source, renderTex);
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = renderTex;
+            Texture2D readableText = new Texture2D(source.width, source.height);
+            readableText.ReadPixels(new Rect(0, 0, renderTex.width, renderTex.height), 0, 0);
+            readableText.Apply();
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(renderTex);
+            return readableText;
+        }
+
+        static Dictionary<PortraitType, string> portraitTypeToString = null;
+        /// <summary>
+        /// 导出头像
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(StoryCharacterData), "GetPortraitSprite", new Type[] { typeof(PortraitType) })]
+        public static void GetPortraitSprite_Export(ref StoryCharacterData __instance, ref Sprite __result, PortraitType type)
+        {
+            if (!exportEnable.Value || !exportingPortaits)
+                return;
+
+            if (portraitTypeToString == null)
+            {
+                // 构造头像类型到string的映射
+                portraitTypeToString = new Dictionary<PortraitType, string>();
+                foreach (PortraitType value in Enum.GetValues(typeof(PortraitType)))
+                {
+                    FieldInfo field = typeof(PortraitType).GetField(value.ToString());
+                    var stringValueAttribute = Attribute.GetCustomAttribute(field, typeof(StringValueAttribute)) as StringValueAttribute;
+                    portraitTypeToString.Add(value, stringValueAttribute.StringValue);
+                }
+            }
+
+            string portraitTypeName = portraitTypeToString[type];
+            string portraitFileName = $"{__instance.Id}_{portraitTypeName}.png";
+            Debug.Log($"ModSupport: GetPortraitSprite {portraitFileName}");
+            if (__result != null)
+            {
+                ExportPortrait(portraitFileName, __result);
+            }
+        }
+
+        public static void ExportPortrait(string filename, Sprite sprite)
+        {
+            var exportPath = Path.Combine(exportPortraitDir, filename);
+            if (File.Exists(exportPath))
+                return;
+            File.WriteAllBytes(exportPath, MakeReadable(sprite.texture).EncodeToPNG());
         }
 
         public static IEnumerable<Type> BaseTypesOf(Type t)
