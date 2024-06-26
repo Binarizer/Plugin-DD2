@@ -31,9 +31,12 @@ namespace Mortal
         static Dictionary<string, string> portraitTable = new Dictionary<string, string>();
         static Dictionary<string, Sprite> portraitCache = new Dictionary<string, Sprite>();
 
+        static Component luaExt = null; // 外挂自定义lua解析器
+
         public void OnRegister(BaseUnityPlugin plugin)
         {
             modName = plugin.Config.Bind("Mod Support", "Mod Name", "test", "Mod Name");
+            luaExt = plugin.gameObject.AddComponent<LuaExt>();
 
             if (modName.Value == "")
             {
@@ -114,6 +117,20 @@ namespace Mortal
             Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
             luaEnv.RunLuaFunction(fn, true, null);
             return false;
+        }
+
+        /// <summary>
+        /// 自定义lua解析器
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(LuaBindings), "AddBindings")]
+        public static bool LuaBindings_Inject(ref LuaBindings __instance)
+        {
+            var t = Traverse.Create(__instance);
+            var boundTypes = t.Field("boundTypes").GetValue<List<string>>();
+            boundTypes.Add(luaExt.GetType().AssemblyQualifiedName);
+            var boundObjects = t.Field("boundObjects").GetValue<List<BoundObject>>();
+            boundObjects.Add(new BoundObject { key = "ext", obj = luaExt.gameObject, component = luaExt });
+            return true;
         }
 
         /// <summary>

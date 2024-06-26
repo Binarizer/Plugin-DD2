@@ -22,7 +22,7 @@ namespace Mortal
         {
             Console.WriteLine("Main Awake: Initialize Hooks");
             RegisterHook(new HookMods());
-            RegisterHook(new HookGeneral());
+            RegisterHook(new HookExporter());
         }
 
         void Start()

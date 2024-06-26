@@ -36,7 +36,8 @@
   <ItemGroup>
     <Compile Include="Hooks\HookMods.cs" />
     <Compile Include="Hooks\IHook.cs" />
-    <Compile Include="Hooks\HookGenerals.cs" />
+    <Compile Include="Hooks\HookExporter.cs" />
+    <Compile Include="LuaExt.cs" />
     <Compile Include="PluginBinarizer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -115,6 +116,10 @@
     </Reference>
     <Reference Include="Mortal.Story">
       <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Mortal.Story.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="OBB.Framework">
