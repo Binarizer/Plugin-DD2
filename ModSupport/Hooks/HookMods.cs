@@ -27,6 +27,8 @@ namespace Mortal
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
         static Dictionary<string, string> luaFileTable = new Dictionary<string, string>();
+        static Dictionary<string, string> conditionTable = new Dictionary<string, string>();
+        static Dictionary<string, string> switchTable = new Dictionary<string, string>();
         static Dictionary<string, string> stringTable = new Dictionary<string, string>();
         static Dictionary<string, string> portraitTable = new Dictionary<string, string>();
         static Dictionary<string, Sprite> portraitCache = new Dictionary<string, Sprite>();
@@ -51,11 +53,28 @@ namespace Mortal
                 return;
             }
 
-            // 外部读取文本
-            foreach (string file in Directory.EnumerateFiles(modPath, "*.lua", SearchOption.AllDirectories))
+            // 外部读取lua剧本
+            string luaScriptPath = Path.Combine(modPath, "story");
+            foreach (string file in Directory.EnumerateFiles(luaScriptPath, "*.lua", SearchOption.AllDirectories))
             {
                 Debug.Log($"ModSupport: Add text file {file}");
                 luaFileTable.Add(Path.GetFileNameWithoutExtension(file), file);
+            }
+
+            // 外部读取lua条件
+            string conditionPath = Path.Combine(modPath, "DataTable/Condition");
+            foreach (string file in Directory.EnumerateFiles(conditionPath, "*.lua", SearchOption.AllDirectories))
+            {
+                Debug.Log($"ModSupport: Add condition file {file}");
+                conditionTable.Add(Path.GetFileNameWithoutExtension(file), file);
+            }
+
+            // 外部读取lua分支
+            string switchPath = Path.Combine(modPath, "DataTable/Switch");
+            foreach (string file in Directory.EnumerateFiles(switchPath, "*.lua", SearchOption.AllDirectories))
+            {
+                Debug.Log($"ModSupport: Add switch file {file}");
+                switchTable.Add(Path.GetFileNameWithoutExtension(file), file);
             }
 
             // 外部读取本地化表
@@ -98,7 +117,7 @@ namespace Mortal
         }
 
         /// <summary>
-        /// 重定向Lua脚本
+        /// 重定向剧本Lua文件
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(LuaManager), "ExecuteLuaScript")]
         public static bool LuaScriptRedirect(ref LuaManager __instance)
@@ -116,6 +135,54 @@ namespace Mortal
             string text = File.ReadAllText(luaFileTable[textName]);
             Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
             luaEnv.RunLuaFunction(fn, true, null);
+            return false;
+        }
+
+        /// <summary>
+        /// 重定向Condition脚本
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Condition")]
+        public static bool ConditionRedirect(string name, ref bool __result)
+        {
+            if (!conditionTable.ContainsKey(name))
+            {
+                return true;
+            }
+
+            Debug.Log($"ModSupport: Find external Condition lua {name}");
+            string script = File.ReadAllText(conditionTable[name]);
+            Debug.Log($"Lua={script}");
+            var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
+            bool result = false;
+            luaEnv.DoLuaString(script, "tmp.Condition", false, delegate (DynValue res)
+            {
+                result = res.Boolean;
+            });
+            __result = result;
+            Debug.Log($"Result={__result}");
+            return false;
+        }
+
+        /// <summary>
+        /// 重定向Switch脚本
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Switch")]
+        public static bool SwitchRedirect(string name, ref int __result)
+        {
+            if (!switchTable.ContainsKey(name))
+            {
+                return true;
+            }
+
+            Debug.Log($"ModSupport: Find external Switch lua {name}");
+            string script = File.ReadAllText(switchTable[name]);
+            var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
+            int result = 0;
+            luaEnv.DoLuaString(script, "tmp.Switch", false, delegate (DynValue res)
+            {
+                result = (int)res.Number;
+            });
+            __result = result;
             return false;
         }
 
