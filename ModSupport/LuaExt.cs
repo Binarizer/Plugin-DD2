@@ -122,7 +122,98 @@ namespace Mortal
     /// </summary>
     public static class LuaGenerator
     {
-        public static string ToLua(this SwitchResultData data)
+        public static string ToLua(this PositionResultData data, bool comment = false)
+        {
+            Traverse t = Traverse.Create(data);
+            var prefix = t.Field("_scriptPrefix").GetValue<string>();
+            var positionEventList = data.List;
+            var sb = new StringBuilder();
+            if (comment)
+            {
+                var note = t.Field("_devNote").GetValue<string>();
+                if (!string.IsNullOrEmpty(note))
+                {
+                    sb.AppendLine($"-- {note}");
+                }
+            }
+            // 写入加权随机函数
+            sb.Append(@"function weighted_random(functions, names)
+    local results = {}
+    local total = 0
+    for i = 1, #functions do
+        local result = functions[i]()
+        results[i] = result
+        total = total + result
+    end
+
+    local rand = math.random() * total
+    local count = 0
+    for i = 1, #functions do
+        count = count + results[i]
+        if rand <= count then
+            return names[i]
+        end
+    end
+end
+");
+            var eventNameList = new List<string>();
+            foreach (var pe in positionEventList)
+            {
+                var name = Traverse.Create(pe).Field("_config").Field("Value").GetValue<string>();
+                var fullName = prefix + "_" + name;
+                eventNameList.Add(fullName);
+                sb.Append($@"
+function {fullName}()
+{pe.ToLua(true)}
+end
+");
+            }
+            sb.Append($@"
+functions = {{{string.Join(", ", eventNameList)}}}
+names = {{'{string.Join("', '", eventNameList)}'}}
+return weighted_random(functions, names)
+");
+            return sb.ToString();
+        }
+        public static string ToLua(this PositionEventData data, bool comment = false)
+        {
+            Traverse t = Traverse.Create(data);
+            StringBuilder sb = new StringBuilder();
+            if (comment)
+            {
+                var name = data.name;
+                var key = t.Field("_config").Field("Key").GetValue<string>();
+                var note = t.Field("_devNote").GetValue<string>();
+                sb.AppendLine($"    -- {name}, {key}, {note}");
+            }
+            int _defaultRate = t.Field("_defaultRate").GetValue<int>();
+            bool _toggleCondition = t.Field("_toggleCondition").GetValue<bool>();
+            var _activeCondition = t.Field("_activeCondition").GetValue<ConditionResultItem>();
+            if (_toggleCondition && _activeCondition != null)
+            {
+                var toggleLua = _activeCondition.ToLua().Trim();
+                if (!string.IsNullOrEmpty(toggleLua))
+                {
+                    sb.Append($@"    local active = {_activeCondition.ToLua()}
+    if not active then
+        return 0 
+    end
+");
+                }
+            }
+            sb.AppendLine($"    local rate = {_defaultRate}");
+            var _eventRateItem = t.Field("_eventRateItem").GetValue<PositionEventRateItem[]>();
+            foreach (PositionEventRateItem eventRate in _eventRateItem)
+            {
+                sb.Append($@"    if ({eventRate.Condition.ToLua()}) then
+        rate = rate + {eventRate.Rate}
+    end
+");
+            }
+            sb.Append($"    return rate");
+            return sb.ToString();
+        }
+        public static string ToLua(this SwitchResultData data, bool comment = false)
         {
             Traverse t = Traverse.Create(data);
             bool useCount = t.Field("_useCount").GetValue<bool>();
@@ -130,17 +221,25 @@ namespace Mortal
                 return "";
             var conditionResultItemList = t.Field("_items").GetValue<List<ConditionResultItem>>();
             StringBuilder sb = new StringBuilder();
+            if (comment)
+            {
+                var note = t.Field("_devNote").GetValue<string>();
+                if (!string.IsNullOrEmpty(note))
+                {
+                    sb.AppendLine($"-- {note}");
+                }
+            }
             int i = 0;
             foreach (var conditionResultItem in conditionResultItemList)
             {
                 sb.AppendLine($"if ({conditionResultItem.ToLua()}) then");
-                sb.AppendLine($"\treturn {++i}");
+                sb.AppendLine($"    return {++i}");
                 sb.AppendLine("end");
             }
             sb.AppendLine($"return {++i}");
             return sb.ToString();
         }
-        public static string ToLua(this ConditionResultData data)
+        public static string ToLua(this ConditionResultData data, bool comment = false)
         {
             Traverse t = Traverse.Create(data);
             var conditionResultItemList = t.Field("_items").GetValue<List<ConditionResultItem>>();
@@ -149,14 +248,27 @@ namespace Mortal
             {
                 expressions.Add(conditionResultItem.ToLua());
             }
+            StringBuilder sb = new StringBuilder();
+            if (comment)
+            {
+                var note = t.Field("_devNote").GetValue<string>();
+                if (!string.IsNullOrEmpty(note))
+                {
+                    sb.AppendLine($"-- {note}");
+                }
+            }
             if (expressions.Count == 1)
             {
-                return $"return {expressions[0]}";
+                sb.Append($"return {expressions[0]}");
             }
-            return $"return {string.Join(" or ", expressions)}";
+            else
+            {
+                sb.Append($"return {string.Join(" or ", expressions)}");
+            }
+            return sb.ToString();
         }
 
-        public static string ToLua(this ConditionResultItem data)
+        public static string ToLua(this ConditionResultItem data, bool comment = false)
         {
             var t = Traverse.Create(data);
             var op = t.Field("_logicOp").GetValue<LogicOperatorType>();
@@ -166,11 +278,28 @@ namespace Mortal
             {
                 expressions.Add(sci.ToLua());
             }
-            if (expressions.Count == 1)
+            StringBuilder sb = new StringBuilder();
+            if (comment)
             {
-                return expressions[0];
+                var note = t.Field("_devNote").GetValue<string>();
+                if (!string.IsNullOrEmpty(note))
+                {
+                    sb.AppendLine($"-- {note}");
+                }
             }
-            return $"( {string.Join(op == LogicOperatorType.AND ? " and " : " or ", expressions)} )";
+            if (expressions.Count == 0)
+            {
+                return "";
+            }
+            else if (expressions.Count == 1)
+            {
+                sb.Append(expressions[0]);
+            }
+            else
+            {
+                sb.Append($"({string.Join(op == LogicOperatorType.AND ? " and " : " or ", expressions)})");
+            }
+            return sb.ToString();
         }
 
         readonly static string[] compareToLua = new string[] { "==", "~=", "<", "<=", ">", ">=" };

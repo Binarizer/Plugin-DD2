@@ -26,88 +26,122 @@ namespace Mortal
         }
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
-        static Dictionary<string, string> luaFileTable = new Dictionary<string, string>();
+        static Dictionary<string, string> storyTable = new Dictionary<string, string>();
         static Dictionary<string, string> conditionTable = new Dictionary<string, string>();
         static Dictionary<string, string> switchTable = new Dictionary<string, string>();
+        static Dictionary<string, string> positionTable = new Dictionary<string, string>();
         static Dictionary<string, string> stringTable = new Dictionary<string, string>();
         static Dictionary<string, string> portraitTable = new Dictionary<string, string>();
         static Dictionary<string, Sprite> portraitCache = new Dictionary<string, Sprite>();
 
         static Component luaExt = null; // 外挂自定义lua解析器
 
+        static void AddFile(Dictionary<string, string> dict, string file)
+        {
+            var key = Path.GetFileNameWithoutExtension(file);
+            if (!dict.ContainsKey(file))
+            {
+                Debug.Log($"ModSupport: Add file {file}");
+                dict.Add(key, file);
+            }
+        }
+
         public void OnRegister(BaseUnityPlugin plugin)
         {
             modName = plugin.Config.Bind("Mod Support", "Mod Name", "test", "Mod Name");
             luaExt = plugin.gameObject.AddComponent<LuaExt>();
 
-            if (modName.Value == "")
+            if (string.IsNullOrEmpty(modName.Value))
             {
                 Debug.Log($"ModSupport: No mod.");
                 return;
             }
 
-            var modPath = Path.Combine(ModRootPath, modName.Value);
-            if (!Directory.Exists(modPath))
+            var mods = modName.Value.Trim().Split(',');
+            foreach (var mod in mods )
             {
-                Debug.Log($"ModSupport: mod dir not exist.");
-                return;
-            }
-
-            // 外部读取lua剧本
-            string luaScriptPath = Path.Combine(modPath, "story");
-            foreach (string file in Directory.EnumerateFiles(luaScriptPath, "*.lua", SearchOption.AllDirectories))
-            {
-                Debug.Log($"ModSupport: Add text file {file}");
-                luaFileTable.Add(Path.GetFileNameWithoutExtension(file), file);
-            }
-
-            // 外部读取lua条件
-            string conditionPath = Path.Combine(modPath, "DataTable/Condition");
-            foreach (string file in Directory.EnumerateFiles(conditionPath, "*.lua", SearchOption.AllDirectories))
-            {
-                Debug.Log($"ModSupport: Add condition file {file}");
-                conditionTable.Add(Path.GetFileNameWithoutExtension(file), file);
-            }
-
-            // 外部读取lua分支
-            string switchPath = Path.Combine(modPath, "DataTable/Switch");
-            foreach (string file in Directory.EnumerateFiles(switchPath, "*.lua", SearchOption.AllDirectories))
-            {
-                Debug.Log($"ModSupport: Add switch file {file}");
-                switchTable.Add(Path.GetFileNameWithoutExtension(file), file);
-            }
-
-            // 外部读取本地化表
-            string stringTablePath = Path.Combine(modPath, "StringTable.csv");
-            if (File.Exists(stringTablePath))
-            {
-                Debug.Log($"ModSupport: Reading StringTable {stringTablePath}");
-                int lines = ReadStringTable(File.ReadAllText(stringTablePath));
-                Debug.Log($"ModSupport: Finish reading {lines} lines.");
-            }
-
-            // 外部读取头像
-            string portraitDir = Path.Combine(modPath, "Portraits");
-            if (Directory.Exists(portraitDir))
-            {
-                foreach (string file in Directory.EnumerateFiles(modPath, "*.png", SearchOption.AllDirectories))
+                var modPath = Path.Combine(ModRootPath, mod);
+                if (!Directory.Exists(modPath))
                 {
-                    Debug.Log($"ModSupport: Add portrait file {file}");
-                    portraitTable.Add(Path.GetFileNameWithoutExtension(file), file);
+                    Debug.Log($"ModSupport: mod dir not exist.");
+                    return;
+                }
+
+                Debug.Log($"ModSupport: Scan mod path {modPath}");
+
+                // 外部读取lua剧本
+                string storyPath = Path.Combine(modPath, "story");
+                if (Directory.Exists(storyPath))
+                {
+                    foreach (string file in Directory.EnumerateFiles(storyPath, "*.lua", SearchOption.AllDirectories))
+                    {
+                        AddFile(storyTable, file);
+                    }
+                }
+
+                // 外部读取等价lua条件判定
+                string conditionPath = Path.Combine(modPath, "LuaEquivalent/Condition");
+                if (Directory.Exists(conditionPath))
+                {
+                    foreach (string file in Directory.EnumerateFiles(conditionPath, "*.lua", SearchOption.AllDirectories))
+                    {
+                        AddFile(conditionTable, file);
+                    }
+                }
+
+                // 外部读取等价lua分支判定
+                string switchPath = Path.Combine(modPath, "LuaEquivalent/Switch");
+                if (Directory.Exists(switchPath))
+                {
+                    foreach (string file in Directory.EnumerateFiles(switchPath, "*.lua", SearchOption.AllDirectories))
+                    {
+                        AddFile(switchTable, file);
+                    }
+                }
+
+                // 外部读取等价lua工作地点（position）
+                string positionPath = Path.Combine(modPath, "LuaEquivalent/Position");
+                if (Directory.Exists(positionPath))
+                {
+                    foreach (string file in Directory.EnumerateFiles(positionPath, "*.lua", SearchOption.AllDirectories))
+                    {
+                        AddFile(positionTable, file);
+                    }
+                }
+
+                // 外部读取本地化表
+                string stringTablePath = Path.Combine(modPath, "StringTable.csv");
+                if (File.Exists(stringTablePath))
+                {
+                    int lines = AddStringTable(File.ReadAllText(stringTablePath));
+                    Debug.Log($"ModSupport: Add {lines} lines to StringTable.");
+                }
+
+                // 外部读取头像
+                string portraitDir = Path.Combine(modPath, "Portraits");
+                if (Directory.Exists(portraitDir))
+                {
+                    foreach (string file in Directory.EnumerateFiles(modPath, "*.png", SearchOption.AllDirectories))
+                    {
+                        AddFile(portraitTable, file);
+                    }
                 }
             }
         }
 
         /// <summary>
-        /// 读csv
+        /// 读csv并添加到本地化表格
         /// </summary>
-        private int ReadStringTable(string data)
+        private int AddStringTable(string data)
         {
             CsvParser parser = new CsvParser();
             var csvLines = parser.Parse(data);
             foreach (var line in csvLines)
             {
-                stringTable.Add(line[0], line[1]);
+                if (!string.IsNullOrEmpty(line[0]) && !stringTable.ContainsKey(line[0]))
+                {
+                    stringTable.Add(line[0], line[1]);
+                }
             }
             return csvLines.Length;
         }
@@ -124,7 +158,7 @@ namespace Mortal
         {
             Traverse.Create(__instance);
             string textName = __instance.ScriptName;
-            if (!luaFileTable.ContainsKey(textName))
+            if (!storyTable.ContainsKey(textName))
             {
                 return true;
             }
@@ -132,14 +166,14 @@ namespace Mortal
             Debug.Log($"ModSupport: Find external lua file {textName}");
             var luaEnv = Traverse.Create(__instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string friendlyName = textName + ".LuaScript";
-            string text = File.ReadAllText(luaFileTable[textName]);
+            string text = File.ReadAllText(storyTable[textName]);
             Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
             luaEnv.RunLuaFunction(fn, true, null);
             return false;
         }
 
         /// <summary>
-        /// 重定向Condition脚本
+        /// 重定向等价Condition脚本
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Condition")]
         public static bool ConditionRedirect(string name, ref bool __result)
@@ -164,7 +198,7 @@ namespace Mortal
         }
 
         /// <summary>
-        /// 重定向Switch脚本
+        /// 重定向等价Switch脚本
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Switch")]
         public static bool SwitchRedirect(string name, ref int __result)
@@ -183,6 +217,31 @@ namespace Mortal
                 result = (int)res.Number;
             });
             __result = result;
+            return false;
+        }
+
+        /// <summary>
+        /// 重定向等价Position脚本
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Position")]
+        public static bool PositionRedirect(string name, ref string __result)
+        {
+            if (!positionTable.ContainsKey(name))
+            {
+                return true;
+            }
+
+            Debug.Log($"ModSupport: Find external Position lua {name}");
+            string script = File.ReadAllText(positionTable[name]);
+            Debug.Log($"Lua={script}");
+            var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
+            string result = "";
+            luaEnv.DoLuaString(script, "tmp.Condition", false, delegate (DynValue res)
+            {
+                result = res.String;
+            });
+            __result = result;
+            Debug.Log($"Result={__result}");
             return false;
         }
 

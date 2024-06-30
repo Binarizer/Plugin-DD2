@@ -2,8 +2,10 @@
 using BepInEx.Unity.Mono;
 using HarmonyLib;
 using Lean.Localization;
+using Mortal.Battle;
 using Mortal.Combat;
 using Mortal.Core;
+using Mortal.Free;
 using Mortal.Story;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -11,7 +13,6 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OBB.Framework.Attributes;
 using OBB.Framework.Extensions;
-using Steamworks;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -39,19 +40,22 @@ namespace Mortal
         private bool f3 = false;
         private bool f4 = false;
         private bool f5 = false;
+        private bool f6 = false;
 
         public void OnUpdate()
         {
             if (exportEnable.Value)
             {
+                // 导出等价Lua脚本
                 bool f3_pressed = Keyboard.current.f3Key.IsPressed();
                 if (f3_pressed && !f3)
                 {
                     Debug.Log("F3 is pressed");
-                    ExportDataTables();
+                    ExportLuaEquivalents();
                 }
                 f3 = f3_pressed;
 
+                // 导出本地化文件
                 bool f4_pressed = Keyboard.current.f4Key.IsPressed();
                 if (f4_pressed && !f4)
                 {
@@ -60,6 +64,7 @@ namespace Mortal
                 }
                 f4 = f4_pressed;
 
+                // 导出头像库
                 bool f5_pressed = Keyboard.current.f5Key.IsPressed();
                 if (f5_pressed && !f5)
                 {
@@ -67,6 +72,15 @@ namespace Mortal
                     ExportPortraits();
                 }
                 f5 = f5_pressed;
+
+                // 导出数据表
+                bool f6_pressed = Keyboard.current.f6Key.IsPressed();
+                if (f6_pressed && !f6)
+                {
+                    Debug.Log("F6 is pressed");
+                    ExportDataTables();
+                }
+                f6 = f6_pressed;
             }
         }
 
@@ -164,7 +178,6 @@ namespace Mortal
             File.WriteAllText(exportPath, sb.ToString());
         }
 
-
         static bool exportJson = false;
         static bool exportLua = true;
         static bool exportingPortaits = false;
@@ -248,12 +261,6 @@ namespace Mortal
             File.WriteAllBytes(exportPath, MakeReadable(sprite.texture).EncodeToPNG());
         }
 
-#if EXPORT_STAT_VARS
-        static HashSet<string> statGroupSet = new HashSet<string>();
-        static List<StatGroupVariable> statGroupList = new List<StatGroupVariable>();
-        static int statGroupSize = 0;
-#endif
-
         static StatModifyManager statModifyManager = null;
         /// <summary>
         /// 挂接StatModifyManager
@@ -264,27 +271,26 @@ namespace Mortal
             statModifyManager = __instance;
         }
 
-        public static void ExportDataTables()
+        public static void ExportLuaEquivalents()
         {
-            JsonSerializer serializer = new JsonSerializer
-            {
-                NullValueHandling = NullValueHandling.Ignore,
-                DefaultValueHandling = DefaultValueHandling.Ignore,
-                Formatting = Formatting.Indented
-            };
-            serializer.ContractResolver = new SerializeFieldContractResolver();
-            serializer.Converters.Add(new StringEnumConverter());
-            serializer.Converters.Add(new ScriptableObjectConverter());
-            serializer.Converters.Add(new StatValueReferenceConverter());
-
-#if EXPORT_STAT_VARS
-            statGroupSet.Clear();
-            statGroupList.Clear();
-            statGroupSize = 0;
-#endif
             Traverse cpm = Traverse.Create(CheckPointManager.Instance);
             {
-                var exportPath = "./DataTable/Condition/";
+                var exportPath = "./LuaEquivalent/Position/";
+                if (!Directory.Exists(exportPath))
+                {
+                    Directory.CreateDirectory(exportPath);
+                }
+                var list = cpm.Field("_position").Field("_list").GetValue<List<PositionResultData>>();
+                foreach (var positionData in list)
+                {
+                    var lua = positionData.ToLua(true);
+                    if (exportLua && !string.IsNullOrEmpty(lua))
+                        File.WriteAllText(Path.Combine(exportPath, positionData.name + ".lua"), lua);
+                }
+                Debug.Log($"export {list.Count} positions");
+            }
+            {
+                var exportPath = "./LuaEquivalent/Condition/";
                 if (!Directory.Exists(exportPath))
                 {
                     Directory.CreateDirectory(exportPath);
@@ -293,17 +299,14 @@ namespace Mortal
                 Debug.Log("_conditionList = " + list?.GetType());
                 foreach (var conditionData in list)
                 {
-                    var json = ToJson(conditionData, serializer);
-                    if (exportJson && !string.IsNullOrEmpty(json))
-                        File.WriteAllText(Path.Combine(exportPath, conditionData.name + ".json"), json);
-                    var lua = conditionData.ToLua();
+                    var lua = conditionData.ToLua(true);
                     if (exportLua && !string.IsNullOrEmpty(lua))
                         File.WriteAllText(Path.Combine(exportPath, conditionData.name + ".lua"), lua);
                 }
                 Debug.Log($"export {list.Count} conditions");
             }
             {
-                var exportPath = "./DataTable/Switch/";
+                var exportPath = "./LuaEquivalent/Switch/";
                 if (!Directory.Exists(exportPath))
                 {
                     Directory.CreateDirectory(exportPath);
@@ -314,60 +317,96 @@ namespace Mortal
                 {
                     foreach(var switchData in switchConfig.List)
                     {
-                        var json = ToJson(switchData, serializer);
-                        if (exportJson && !string.IsNullOrEmpty(json))
-                            File.WriteAllText(Path.Combine(exportPath, switchData.name + ".json"), json);
-                        var lua = switchData.ToLua();
+                        var lua = switchData.ToLua(true);
                         if (exportLua && !string.IsNullOrEmpty(lua))
                             File.WriteAllText(Path.Combine(exportPath, switchData.name + ".lua"), lua);
                     }
                     Debug.Log($"export {switchConfig.List.Count} switches");
                 }
             }
-#if EXPORT_STAT_VARS
-            {
-                // 该表需要通过前面的几张表格动态收集，并没有一个整体集合
-                var exportPath = "./StatVariable/";
-                if (!Directory.Exists(exportPath))
-                {
-                    Directory.CreateDirectory(exportPath);
-                }
-                for (int i = 0; i < statGroupSize; ++i)
-                {
-                    var statGroupVar = statGroupList[i];
-                    var json = ToJson(statGroupVar, serializer);
-                    if (exportJson && !string.IsNullOrEmpty(json))
-                        File.WriteAllText(Path.Combine(exportPath, statGroupVar.name + ".json"), json);
-                    var lua = statGroupVar.ToLua();
-                    if (exportLua && !string.IsNullOrEmpty(lua))
-                        File.WriteAllText(Path.Combine(exportPath, statGroupVar.name + ".lua"), lua);
-                }
-                Debug.Log($"export {statGroupSize} statGroupVars");
-            }
-#endif
-
-            ExportDevelops();
-            ExportFlags();
-            ExportItems();
-            ExportSkills();
-            ExportCombats();
         }
 
-        static string ToJson(ScriptableObject obj, JsonSerializer serializer)
+        public static void ExportDataTables()
         {
-            JObject token = new JObject();
-            foreach (var field in obj.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            var exportPath = "./DataTable/";
+            if (!Directory.Exists(exportPath))
             {
-                if (IsSerializedField(field))
+                Directory.CreateDirectory(exportPath);
+            }
+
+            var serializer = new JsonSerializer
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                DefaultValueHandling = DefaultValueHandling.Ignore,
+                Formatting = Formatting.Indented,
+                ContractResolver = new SerializeFieldContractResolver()
+            };
+            serializer.Converters.Add(new StringEnumConverter());
+            serializer.Converters.Add(new ScriptableObjectConverter());
+            serializer.Converters.Add(new StatValueReferenceConverter());
+
+            Assembly[] assemblies = new Assembly[]
+            {
+                Assembly.GetAssembly(typeof(MissionData)), // Mortal.Core
+                Assembly.GetAssembly(typeof(DiceResultData)),// Mortal.Story
+                Assembly.GetAssembly(typeof(CombatLevel)), // Mortal.Combat
+                Assembly.GetAssembly(typeof(DropItem)), // Mortal.Battle
+                Assembly.GetAssembly(typeof(FreePositionData)), // Mortal.Free
+            };
+            var so_types = new List<Type>();
+            foreach (var assembly in assemblies)
+            {
+                foreach(var type in assembly.GetTypes())
                 {
-                    token.Add(field.Name, JToken.FromObject(field.GetValue(obj), serializer));
+                    if (!type.IsAbstract && !type.IsGenericType && typeof(ScriptableObject).IsAssignableFrom(type))
+                    {
+                        Debug.Log($"Find ScriptableObject type = {type.Name}");
+                        so_types.Add(type);
+                    }
                 }
             }
-            return token.ToString();
+            foreach (var so_type in so_types)
+            {
+                var soArray = Resources.FindObjectsOfTypeAll(so_type);
+                Debug.Log($"Find so_type {so_type.Name}, count = {soArray.Length}");
+                if (soArray.Length > 1) // 一个以上的才可谓“表”
+                {
+                    var dir = Path.Combine(exportPath, so_type.Name);
+                    foreach (var item in soArray)
+                    {
+                        ScriptableObject so = item as ScriptableObject;
+                        if (so != null && !(so is CombatStateEffectUnitScriptable))
+                        {
+                            if (!Directory.Exists(dir))
+                            {
+                                Directory.CreateDirectory(dir);
+                            }
+                            File.WriteAllText(Path.Combine(dir, so.name + ".json"), ToJson(so, serializer).ToString());
+                        }
+                    }
+                }
+            }
+        }
+
+        static JToken ToJson(ScriptableObject obj, JsonSerializer serializer)
+        {
+            JObject token = new JObject();
+            foreach (var field in GetSerializedFields(obj.GetType(), typeof(ScriptableObject)))
+            {
+                var value = field.GetValue(obj);
+                if (value != null)
+                {
+                    token.Add(field.Name, JToken.FromObject(value, serializer));
+                }
+            }
+            return token;
         }
 
         static bool IsSerializedField(FieldInfo field)
         {
+            if (field.IsPublic)
+                return true;
+
             foreach(var att in field.GetCustomAttributes(true))
             {
                 if (att is SerializeField)
@@ -378,19 +417,56 @@ namespace Mortal
             return false;
         }
 
+        static readonly Dictionary<Type, List<FieldInfo>> SerialzedFieldCache = new Dictionary<Type, List<FieldInfo>>();
+
+        static IEnumerable<FieldInfo> GetSerializedFields(Type type, Type baseType)
+        {
+            if (SerialzedFieldCache.TryGetValue(type, out List<FieldInfo> cache))
+            {
+                return cache;
+            }
+
+            var ret = new List<FieldInfo>();
+            HashSet<string> nameSet = new HashSet<string>();
+            while (type != baseType)
+            {
+                var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                foreach (var field in fields)
+                {
+                    if (!nameSet.Contains(field.Name) && IsSerializedField(field))
+                    {
+                        nameSet.Add(field.Name);
+                        ret.Add(field);
+                    }
+                }
+                type = type.BaseType;
+            }
+            Debug.Log($"GetSerializedFields: Type = {type.Name}, Field Count = {ret.Count}");
+            return ret;
+        }
+
+        /// <summary>
+        /// 输出公共和SerialzedField属性
+        /// </summary>
         public class SerializeFieldContractResolver : DefaultContractResolver
         {
             protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
             {
-                var props = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                                .Where(f => f.IsPublic || IsSerializedField(f))
-                                .Select(f => base.CreateProperty(f, memberSerialization))
-                            .ToList();
-                props.ForEach(p => { p.Writable = true; p.Readable = true; });
+                var props = new List<JsonProperty>();
+                foreach (var field in GetSerializedFields(type, typeof(object)))
+                {
+                    var prop = base.CreateProperty(field, memberSerialization);
+                    prop.Writable = true;
+                    prop.Readable = true;
+                    props.Add(prop);
+                }
                 return props;
             }
         }
 
+        /// <summary>
+        /// ScriptableObject导出时只给类型和名字
+        /// </summary>
         public class ScriptableObjectConverter : JsonConverter
         {
             public override bool CanConvert(Type objectType)
@@ -406,22 +482,17 @@ namespace Mortal
             public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
             {
                 ScriptableObject item = value as ScriptableObject;
-                JValue jvalue = (JValue)item.name;
-                jvalue.WriteTo(writer);
-
-#if EXPORT_STAT_VARS
-                if (value.GetType() == typeof(StatGroupVariable))
+                new JObject
                 {
-                    if (!statGroupSet.Contains(item.name))
-                    {
-                        statGroupSet.Add(item.name);
-                        statGroupList.Add((StatGroupVariable)item);
-                        statGroupSize++;
-                    }
-                }
-#endif
+                    { "so.type", item.GetType().Name },
+                    { "so.name", item.name }
+                }.WriteTo(writer);
             }
         }
+
+        /// <summary>
+        /// 这玩意填了一些多余的数据，该解析器会去掉
+        /// </summary>
         public class StatValueReferenceConverter : JsonConverter
         {
             public override bool CanConvert(Type objectType)
