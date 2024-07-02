@@ -6,6 +6,7 @@ using Ideafixxxer.CsvParser;
 using MoonSharp.Interpreter;
 using Mortal.Core;
 using Mortal.Story;
+using NAudio.Wave;
 using OBB.Framework.Attributes;
 using System;
 using System.Collections.Generic;
@@ -26,21 +27,23 @@ namespace Mortal
         }
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
-        static Dictionary<string, string> storyTable = new Dictionary<string, string>();
-        static Dictionary<string, string> conditionTable = new Dictionary<string, string>();
-        static Dictionary<string, string> switchTable = new Dictionary<string, string>();
-        static Dictionary<string, string> positionTable = new Dictionary<string, string>();
-        static Dictionary<string, string> stringTable = new Dictionary<string, string>();
-        static Dictionary<string, string> portraitTable = new Dictionary<string, string>();
-        static Dictionary<string, Sprite> portraitCache = new Dictionary<string, Sprite>();
+        readonly static Dictionary<string, string> mapStory = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapCondition = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapSwitch = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapPosition = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapString = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapVoice = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
+        readonly static Dictionary<string, Sprite> cachePortrait = new Dictionary<string, Sprite>();
 
         static Component luaExt = null; // 外挂自定义lua解析器
+        static WaveOutEvent waveOut = new WaveOutEvent();   // 外挂音频处理
 
         static void AddFile(Dictionary<string, string> dict, string file)
         {
             var key = Path.GetFileNameWithoutExtension(file);
             if (!dict.ContainsKey(file))
-            {
+            {           
                 Debug.Log($"ModSupport: Add file {file}");
                 dict.Add(key, file);
             }
@@ -75,7 +78,7 @@ namespace Mortal
                 {
                     foreach (string file in Directory.EnumerateFiles(storyPath, "*.lua", SearchOption.AllDirectories))
                     {
-                        AddFile(storyTable, file);
+                        AddFile(mapStory, file);
                     }
                 }
 
@@ -85,7 +88,7 @@ namespace Mortal
                 {
                     foreach (string file in Directory.EnumerateFiles(conditionPath, "*.lua", SearchOption.AllDirectories))
                     {
-                        AddFile(conditionTable, file);
+                        AddFile(mapCondition, file);
                     }
                 }
 
@@ -95,7 +98,7 @@ namespace Mortal
                 {
                     foreach (string file in Directory.EnumerateFiles(switchPath, "*.lua", SearchOption.AllDirectories))
                     {
-                        AddFile(switchTable, file);
+                        AddFile(mapSwitch, file);
                     }
                 }
 
@@ -105,7 +108,7 @@ namespace Mortal
                 {
                     foreach (string file in Directory.EnumerateFiles(positionPath, "*.lua", SearchOption.AllDirectories))
                     {
-                        AddFile(positionTable, file);
+                        AddFile(mapPosition, file);
                     }
                 }
 
@@ -123,7 +126,17 @@ namespace Mortal
                 {
                     foreach (string file in Directory.EnumerateFiles(modPath, "*.png", SearchOption.AllDirectories))
                     {
-                        AddFile(portraitTable, file);
+                        AddFile(mapPortrait, file);
+                    }
+                }
+
+                // 外部读取配音
+                string voiceDir = Path.Combine(modPath, "Voice");
+                if (Directory.Exists(voiceDir))
+                {
+                    foreach (string file in Directory.EnumerateFiles(modPath, "*.mp3", SearchOption.AllDirectories))
+                    {
+                        AddFile(mapVoice, file);
                     }
                 }
             }
@@ -138,9 +151,9 @@ namespace Mortal
             var csvLines = parser.Parse(data);
             foreach (var line in csvLines)
             {
-                if (!string.IsNullOrEmpty(line[0]) && !stringTable.ContainsKey(line[0]))
+                if (!string.IsNullOrEmpty(line[0]) && !mapString.ContainsKey(line[0]))
                 {
-                    stringTable.Add(line[0], line[1]);
+                    mapString.Add(line[0], line[1]);
                 }
             }
             return csvLines.Length;
@@ -151,6 +164,53 @@ namespace Mortal
         }
 
         /// <summary>
+        /// 播语音
+        /// </summary>
+        static void PlayVoice(string audioFilePath)
+        {
+            var waveStream = new Mp3FileReader(audioFilePath);
+            waveOut.Init(waveStream);
+            waveOut.Play();
+        }
+
+        /// <summary>
+        /// 重定向音频文件1
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(SayDialog), "DoSay")]
+        public static bool SayPrefix(ref string text)
+        {
+            waveOut.Stop();
+
+            if (!text.StartsWith("ac<"))
+                return true;
+
+            int textPos = text.IndexOf(">");
+            if (textPos < 4)
+                return true;
+
+            string voiceKey = text.Substring(3, textPos - 3);
+            if (!mapVoice.ContainsKey(voiceKey))
+                return true;
+
+            PlayVoice(mapVoice[voiceKey]);
+
+            text = text.Substring(textPos + 1);
+            return true;
+        }
+
+        /// <summary>
+        /// 重定向音频文件2
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(LuaManager), "GetStoryText")]
+        public static void GetStoryTextPostProcess(string key, ref string __result)
+        {
+            if (mapVoice.ContainsKey(key))
+            {
+                __result = $"ac<{key}>{__result}";
+            }
+        }
+
+        /// <summary>
         /// 重定向剧本Lua文件
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(LuaManager), "ExecuteLuaScript")]
@@ -158,7 +218,7 @@ namespace Mortal
         {
             Traverse.Create(__instance);
             string textName = __instance.ScriptName;
-            if (!storyTable.ContainsKey(textName))
+            if (!mapStory.ContainsKey(textName))
             {
                 return true;
             }
@@ -166,7 +226,7 @@ namespace Mortal
             Debug.Log($"ModSupport: Find external lua file {textName}");
             var luaEnv = Traverse.Create(__instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string friendlyName = textName + ".LuaScript";
-            string text = File.ReadAllText(storyTable[textName]);
+            string text = File.ReadAllText(mapStory[textName]);
             Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
             luaEnv.RunLuaFunction(fn, true, null);
             return false;
@@ -178,13 +238,13 @@ namespace Mortal
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Condition")]
         public static bool ConditionRedirect(string name, ref bool __result)
         {
-            if (!conditionTable.ContainsKey(name))
+            if (!mapCondition.ContainsKey(name))
             {
                 return true;
             }
 
             Debug.Log($"ModSupport: Find external Condition lua {name}");
-            string script = File.ReadAllText(conditionTable[name]);
+            string script = File.ReadAllText(mapCondition[name]);
             Debug.Log($"Lua={script}");
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             bool result = false;
@@ -203,13 +263,13 @@ namespace Mortal
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Switch")]
         public static bool SwitchRedirect(string name, ref int __result)
         {
-            if (!switchTable.ContainsKey(name))
+            if (!mapSwitch.ContainsKey(name))
             {
                 return true;
             }
 
             Debug.Log($"ModSupport: Find external Switch lua {name}");
-            string script = File.ReadAllText(switchTable[name]);
+            string script = File.ReadAllText(mapSwitch[name]);
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             int result = 0;
             luaEnv.DoLuaString(script, "tmp.Switch", false, delegate (DynValue res)
@@ -226,17 +286,17 @@ namespace Mortal
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Position")]
         public static bool PositionRedirect(string name, ref string __result)
         {
-            if (!positionTable.ContainsKey(name))
+            if (!mapPosition.ContainsKey(name))
             {
                 return true;
             }
 
             Debug.Log($"ModSupport: Find external Position lua {name}");
-            string script = File.ReadAllText(positionTable[name]);
+            string script = File.ReadAllText(mapPosition[name]);
             Debug.Log($"Lua={script}");
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string result = "";
-            luaEnv.DoLuaString(script, "tmp.Condition", false, delegate (DynValue res)
+            luaEnv.DoLuaString(script, "tmp.Position", false, delegate (DynValue res)
             {
                 result = res.String;
             });
@@ -265,13 +325,13 @@ namespace Mortal
         [HarmonyPrefix, HarmonyPatch(typeof(LeanLocalizationResolver), "GetString", new Type[] { typeof(string) })]
         public static bool GetStringRedirect(ref LeanLocalizationResolver __instance, ref string __result, string key)
         {
-            if (!stringTable.ContainsKey(key))
+            if (!mapString.ContainsKey(key))
             {
                 return true;
             }
 
             Debug.Log($"ModSupport: Find external string {key}");
-            __result = stringTable[key];
+            __result = mapString[key];
             return false;
         }
 
@@ -308,21 +368,21 @@ namespace Mortal
 
         public static bool ReplacePortrait(string portraitName, ref Sprite __result)
         {
-            if (portraitCache.ContainsKey(portraitName))
+            if (cachePortrait.ContainsKey(portraitName))
             {
                 Debug.Log($"Find cached portrait {portraitName}");
-                __result = portraitCache[portraitName];
+                __result = cachePortrait[portraitName];
                 return false;
             }
 
-            if (portraitTable.ContainsKey(portraitName))
+            if (mapPortrait.ContainsKey(portraitName))
             {
                 Debug.Log($"Find mod portrait {portraitName}");
-                var sprite = LoadSprite(portraitTable[portraitName]);
+                var sprite = LoadSprite(mapPortrait[portraitName]);
                 if (sprite != null)
                 {
                     sprite.name = portraitName;
-                    portraitCache.Add(portraitName, sprite);
+                    cachePortrait.Add(portraitName, sprite);
                     __result = sprite;
                     return false;
                 }

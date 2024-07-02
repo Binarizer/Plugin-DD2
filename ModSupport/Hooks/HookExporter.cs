@@ -94,92 +94,6 @@ namespace Mortal
             }
             File.WriteAllText(exportPath, sb.ToString());
         }
-
-        public static void ExportFlags()
-        {
-            var exportPath = "./DataTable/FlagData.csv";
-            var _flagList = MissionManagerData.Instance.FlagsCollection.ToList();
-            Traverse smm = Traverse.Create(statModifyManager);
-            var talkOptionFlagCollection = smm.Field("_talkOptionFlag").GetValue<FlagCollectionData>();
-            _flagList.Add(talkOptionFlagCollection);
-            StringBuilder sb = new StringBuilder();
-            foreach (var flagCollection in _flagList)
-            {
-                foreach (var flagData in flagCollection.List)
-                {
-                    var id = flagData.name;
-                    var devNote = Traverse.Create(flagData).Field("_devNote").GetValue<string>();
-                    sb.AppendLine($"{id},\"{devNote}\"");
-                }
-                Debug.Log($"export {flagCollection.List.Count} flags, name = {flagCollection.name}");
-            }
-            File.WriteAllText(exportPath, sb.ToString());
-        }
-
-        public static void ExportItems()
-        {
-            var exportPath = "./DataTable/ItemData.csv";
-            var itemList = new List<ItemData>();
-            itemList.AddRange(ItemDatabase.Instance.Books.List);
-            itemList.AddRange(ItemDatabase.Instance.Miscs.List);
-            itemList.AddRange(ItemDatabase.Instance.Special.List);
-            StringBuilder sb = new StringBuilder();
-            foreach (var item in itemList)
-            {
-                var id = Traverse.Create(item).Field("_id").GetValue<string>();
-                var devNote = Traverse.Create(item).Field("_devNote").GetValue<string>();
-                var type = item.ItemType.GetStringValue();
-                sb.AppendLine($"{id},\"{devNote}\",{type}");
-            }
-            File.WriteAllText(exportPath, sb.ToString());
-        }
-        public static void ExportSkills()
-        {
-            var exportPath = "./DataTable/PlayerTalentData.csv";
-            var itemList = PlayerStatManagerData.Instance.Talents.List;
-            StringBuilder sb = new StringBuilder();
-            foreach (var item in itemList)
-            {
-                var id = item.Id;
-                var name = LeanLocalization.GetTranslationText(item.GetIdKey());
-                var desc = LeanLocalization.GetTranslationText(item.GetDescKey());
-                sb.AppendLine($"{id},\"{name}\",\"{desc}\"");
-            }
-            File.WriteAllText(exportPath, sb.ToString());
-        }
-
-        public static void ExportDevelops()
-        {
-            var exportPath = "./DataTable/UpgradeItemData.csv";
-            var itemList = LuaExt.GetAllDevelopItems();
-            StringBuilder sb = new StringBuilder();
-            foreach (var item in itemList)
-            {
-                var id = Traverse.Create(item).Field("_key").GetValue<string>();
-                var devNote = Traverse.Create(item).Field("_note").GetValue<string>();
-                var type = item.ItemType.ToString();
-                sb.AppendLine($"{id},\"{devNote}\",{type}");
-            }
-            File.WriteAllText(exportPath, sb.ToString());
-        }
-
-        public static void ExportCombats()
-        {
-            var exportPath = "./DataTable/CombatLevel.csv";
-            var itemList = Traverse.Create(CombatManager.Instance).Field("_levelConfig").GetValue<CombatLevelConfig>().List;
-            StringBuilder sb = new StringBuilder();
-            foreach (CombatLevel item in itemList)
-            {
-                var id = item.name;
-                var desc = item.Desc;
-                var enemy = item.EnemyStat?.name;
-                sb.AppendLine($"{id},\"{desc}\",\"{enemy}\"");
-            }
-            File.WriteAllText(exportPath, sb.ToString());
-        }
-
-        static bool exportJson = false;
-        static bool exportLua = true;
         static bool exportingPortaits = false;
         static string exportPortraitDir = null;
         public static void ExportPortraits()
@@ -284,7 +198,7 @@ namespace Mortal
                 foreach (var positionData in list)
                 {
                     var lua = positionData.ToLua(true);
-                    if (exportLua && !string.IsNullOrEmpty(lua))
+                    if (!string.IsNullOrEmpty(lua))
                         File.WriteAllText(Path.Combine(exportPath, positionData.name + ".lua"), lua);
                 }
                 Debug.Log($"export {list.Count} positions");
@@ -300,7 +214,7 @@ namespace Mortal
                 foreach (var conditionData in list)
                 {
                     var lua = conditionData.ToLua(true);
-                    if (exportLua && !string.IsNullOrEmpty(lua))
+                    if (!string.IsNullOrEmpty(lua))
                         File.WriteAllText(Path.Combine(exportPath, conditionData.name + ".lua"), lua);
                 }
                 Debug.Log($"export {list.Count} conditions");
@@ -318,7 +232,7 @@ namespace Mortal
                     foreach(var switchData in switchConfig.List)
                     {
                         var lua = switchData.ToLua(true);
-                        if (exportLua && !string.IsNullOrEmpty(lua))
+                        if (!string.IsNullOrEmpty(lua))
                             File.WriteAllText(Path.Combine(exportPath, switchData.name + ".lua"), lua);
                     }
                     Debug.Log($"export {switchConfig.List.Count} switches");
