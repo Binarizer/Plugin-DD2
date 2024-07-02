@@ -23,7 +23,8 @@ namespace Mortal
             Console.WriteLine("Main Awake: Initialize Hooks");
             RegisterHook(new HookMods());
             RegisterHook(new HookExporter());
-        }
+            RegisterHook(new HookDataTable());
+        }   
 
         void Start()
         {

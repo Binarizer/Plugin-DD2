@@ -49,6 +49,20 @@ namespace Mortal
             }
         }
 
+        public static List<string> ModPaths = new List<string>();
+        public static string FindModFile(string path)
+        {
+            foreach(var modPath in ModPaths)
+            {
+                var fullPath = Path.Combine(modPath, path);
+                if (File.Exists(fullPath))
+                {
+                    return fullPath;
+                }
+            }
+            return null;
+        }
+
         public void OnRegister(BaseUnityPlugin plugin)
         {
             modName = plugin.Config.Bind("Mod Support", "Mod Name", "test", "Mod Name");
@@ -71,6 +85,7 @@ namespace Mortal
                 }
 
                 Debug.Log($"ModSupport: Scan mod path {modPath}");
+                ModPaths.Add(modPath);
 
                 // 外部读取lua剧本
                 string storyPath = Path.Combine(modPath, "story");

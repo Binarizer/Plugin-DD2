@@ -21,6 +21,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using static Mono.Security.X509.X520;
 
 namespace Mortal
 {
@@ -32,8 +33,23 @@ namespace Mortal
             return new Type[] { GetType() };
         }
 
+        public static JsonSerializer exSerializer = null;
+
         public void OnRegister(BaseUnityPlugin plugin)
         {
+            exportEnable = plugin.Config.Bind("Enable Export", "Enable Export", false, "Enable Export");
+
+            exSerializer = new JsonSerializer
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                DefaultValueHandling = DefaultValueHandling.Ignore,
+                Formatting = Formatting.Indented,
+                ContractResolver = new SerializeFieldContractResolver()
+            };
+            exSerializer.Converters.Add(new StringEnumConverter());
+            exSerializer.Converters.Add(new ScriptableObjectConverter());
+            exSerializer.Converters.Add(new StatValueReferenceConverter());
+
             exportEnable = plugin.Config.Bind("Enable Export", "Enable Export", false, "Enable Export");
         }
 
@@ -240,6 +256,39 @@ namespace Mortal
             }
         }
 
+        public static List<Type> SoTypes
+        {
+            get
+            {
+                if (_so_types != null)
+                {
+                    return _so_types;
+                }
+                Assembly[] assemblies = new Assembly[]
+                {
+                Assembly.GetAssembly(typeof(MissionData)), // Mortal.Core
+                Assembly.GetAssembly(typeof(DiceResultData)),// Mortal.Story
+                Assembly.GetAssembly(typeof(CombatLevel)), // Mortal.Combat
+                Assembly.GetAssembly(typeof(DropItem)), // Mortal.Battle
+                Assembly.GetAssembly(typeof(FreePositionData)), // Mortal.Free
+                };
+                _so_types = new List<Type>();
+                foreach (var assembly in assemblies)
+                {
+                    foreach (var type in assembly.GetTypes())
+                    {
+                        if (!type.IsAbstract && !type.IsGenericType && typeof(ScriptableObject).IsAssignableFrom(type))
+                        {
+                            Debug.Log($"Find ScriptableObject type = {type.Name}");
+                            _so_types.Add(type);
+                        }
+                    }
+                }
+                return _so_types;
+            }
+        }
+        private static List<Type> _so_types = null;
+
         public static void ExportDataTables()
         {
             var exportPath = "./DataTable/";
@@ -248,38 +297,7 @@ namespace Mortal
                 Directory.CreateDirectory(exportPath);
             }
 
-            var serializer = new JsonSerializer
-            {
-                NullValueHandling = NullValueHandling.Ignore,
-                DefaultValueHandling = DefaultValueHandling.Ignore,
-                Formatting = Formatting.Indented,
-                ContractResolver = new SerializeFieldContractResolver()
-            };
-            serializer.Converters.Add(new StringEnumConverter());
-            serializer.Converters.Add(new ScriptableObjectConverter());
-            serializer.Converters.Add(new StatValueReferenceConverter());
-
-            Assembly[] assemblies = new Assembly[]
-            {
-                Assembly.GetAssembly(typeof(MissionData)), // Mortal.Core
-                Assembly.GetAssembly(typeof(DiceResultData)),// Mortal.Story
-                Assembly.GetAssembly(typeof(CombatLevel)), // Mortal.Combat
-                Assembly.GetAssembly(typeof(DropItem)), // Mortal.Battle
-                Assembly.GetAssembly(typeof(FreePositionData)), // Mortal.Free
-            };
-            var so_types = new List<Type>();
-            foreach (var assembly in assemblies)
-            {
-                foreach(var type in assembly.GetTypes())
-                {
-                    if (!type.IsAbstract && !type.IsGenericType && typeof(ScriptableObject).IsAssignableFrom(type))
-                    {
-                        Debug.Log($"Find ScriptableObject type = {type.Name}");
-                        so_types.Add(type);
-                    }
-                }
-            }
-            foreach (var so_type in so_types)
+            foreach (var so_type in SoTypes)
             {
                 var soArray = Resources.FindObjectsOfTypeAll(so_type);
                 Debug.Log($"Find so_type {so_type.Name}, count = {soArray.Length}");
@@ -295,11 +313,30 @@ namespace Mortal
                             {
                                 Directory.CreateDirectory(dir);
                             }
-                            File.WriteAllText(Path.Combine(dir, so.name + ".json"), ToJson(so, serializer).ToString());
+                            File.WriteAllText(Path.Combine(dir, so.name + ".json"), ToJson(so, exSerializer).ToString());
                         }
                     }
                 }
             }
+        }
+
+        public static Dictionary<string, ScriptableObject> SoResolveLater = new Dictionary<string, ScriptableObject>();
+        public static void FromJsonString(ref ScriptableObject obj, string jsonString)
+        {
+            JObject jobj = JObject.Parse(jsonString);
+            var t = Traverse.Create(obj);
+            foreach (var field in jobj.Properties())
+            {
+                var tField = t.Field(field.Name);
+                if (tField == null)
+                {
+                    Debug.Log($"Warning: {t.GetValueType().Name} cannot find field {field.Name}, skip!");
+                    continue;
+                }
+                tField.SetValue(field.Value.ToObject(tField.GetValueType(), exSerializer));
+            }
+
+            //Debug.Log(ToJson(obj, exSerializer).ToString());
         }
 
         static JToken ToJson(ScriptableObject obj, JsonSerializer serializer)
@@ -379,7 +416,9 @@ namespace Mortal
         }
 
         /// <summary>
-        /// ScriptableObject导出时只给类型和名字
+        /// ScriptableObject做索引处理
+        /// 导出时只给类型和名字
+        /// 导入时需通过类型和名字查找对应object
         /// </summary>
         public class ScriptableObjectConverter : JsonConverter
         {
@@ -390,17 +429,35 @@ namespace Mortal
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
-                throw new NotImplementedException();
+                JObject jobj = JObject.Load(reader);
+                var soType = (string)jobj["so.type"];
+                var soName = (string)jobj["so.name"];
+                Type realType = HookExporter.SoTypes.FirstOrDefault(item => item.Name == soType);
+                if (realType != null && !objectType.IsAssignableFrom(realType))
+                {
+                    Debug.Log($"ReadJson: type unmatch, need {objectType.Name}, get {soType}!");
+                    return null;
+                }
+                var soArray = Resources.FindObjectsOfTypeAll(realType);
+                var so = soArray.FirstOrDefault(item => item.name == soName);
+                if (so == null)
+                {
+                    Debug.Log($"ReadJson: {soType}.{soName} not found, add new one later");
+                    so = ScriptableObject.CreateInstance(realType);
+                    HookExporter.SoResolveLater.Add(soType + "." + soName, so as ScriptableObject);
+                }
+                return so;
             }
 
             public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
             {
                 ScriptableObject item = value as ScriptableObject;
-                new JObject
+                var jobj = new JObject
                 {
                     { "so.type", item.GetType().Name },
                     { "so.name", item.name }
-                }.WriteTo(writer);
+                };
+                jobj.WriteTo(writer);
             }
         }
 

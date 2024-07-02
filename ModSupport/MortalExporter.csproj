@@ -34,6 +34,7 @@
     <LangVersion>7.1</LangVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Hooks\HookDataTable.cs" />
     <Compile Include="Hooks\HookMods.cs" />
     <Compile Include="Hooks\IHook.cs" />
     <Compile Include="Hooks\HookExporter.cs" />
