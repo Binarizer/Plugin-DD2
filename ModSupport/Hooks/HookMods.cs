@@ -34,7 +34,7 @@ namespace Mortal
         readonly static Dictionary<string, string> mapString = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapVoice = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
-        readonly static Dictionary<string, Sprite> cachePortrait = new Dictionary<string, Sprite>();
+        readonly static Dictionary<string, Sprite> cacheSprite = new Dictionary<string, Sprite>();
 
         static Component luaExt = null; // 外挂自定义lua解析器
         static WaveOutEvent waveOut = new WaveOutEvent();   // 外挂音频处理
@@ -50,6 +50,10 @@ namespace Mortal
         }
 
         public static List<string> ModPaths = new List<string>();
+
+        /// <summary>
+        /// 获取首个符合相对路径的文件
+        /// </summary>
         public static string FindModFile(string path)
         {
             foreach(var modPath in ModPaths)
@@ -383,13 +387,6 @@ namespace Mortal
 
         public static bool ReplacePortrait(string portraitName, ref Sprite __result)
         {
-            if (cachePortrait.ContainsKey(portraitName))
-            {
-                Debug.Log($"Find cached portrait {portraitName}");
-                __result = cachePortrait[portraitName];
-                return false;
-            }
-
             if (mapPortrait.ContainsKey(portraitName))
             {
                 Debug.Log($"Find mod portrait {portraitName}");
@@ -397,7 +394,6 @@ namespace Mortal
                 if (sprite != null)
                 {
                     sprite.name = portraitName;
-                    cachePortrait.Add(portraitName, sprite);
                     __result = sprite;
                     return false;
                 }
@@ -406,19 +402,24 @@ namespace Mortal
             return true;
         }
 
-        public static Sprite LoadSprite(string FilePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
+        public static Sprite LoadSprite(string filePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
         {
-            Texture2D Tex2D;
-            byte[] FileData;
+            if (cacheSprite.ContainsKey(filePath))
+                return cacheSprite[filePath];
 
-            if (File.Exists(FilePath))
+            Texture2D tex2D;
+            byte[] fileData;
+
+            if (File.Exists(filePath))
             {
-                FileData = File.ReadAllBytes(FilePath);
-                Tex2D = new Texture2D(2, 2);
-                if (Tex2D.LoadImage(FileData))
+                fileData = File.ReadAllBytes(filePath);
+                tex2D = new Texture2D(2, 2);
+                if (tex2D.LoadImage(fileData))
                 {
-                    Sprite NewSprite = Sprite.Create(Tex2D, new Rect(0, 0, Tex2D.width, Tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
-                    return NewSprite;
+                    Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                    sprite.name = Path.GetFileNameWithoutExtension(filePath);
+                    cacheSprite.Add(filePath, sprite);
+                    return sprite;
                 }
             }
             return null;

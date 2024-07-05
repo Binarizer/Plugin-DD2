@@ -12,7 +12,6 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OBB.Framework.Attributes;
-using OBB.Framework.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,14 +19,14 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using static Mono.Security.X509.X520;
 
 namespace Mortal
 {
     public class HookExporter : IHook
     {
         private static ConfigEntry<bool> exportEnable;
+        private static ConfigEntry<string> exportDir;
+        private static ConfigEntry<bool> exportImage;
         public IEnumerable<Type> GetRegisterTypes()
         {
             return new Type[] { GetType() };
@@ -37,7 +36,9 @@ namespace Mortal
 
         public void OnRegister(BaseUnityPlugin plugin)
         {
-            exportEnable = plugin.Config.Bind("Enable Export", "Enable Export", false, "Enable Export");
+            exportEnable = plugin.Config.Bind("Export", "Enable Export", false, "Enable Export");
+            exportDir = plugin.Config.Bind("Export", "Export Dir", "./", "Export Dir");
+            exportImage = plugin.Config.Bind("Export", "Export PNG", false, "Export PNG");
 
             exSerializer = new JsonSerializer
             {
@@ -49,60 +50,46 @@ namespace Mortal
             exSerializer.Converters.Add(new StringEnumConverter());
             exSerializer.Converters.Add(new ScriptableObjectConverter());
             exSerializer.Converters.Add(new StatValueReferenceConverter());
-
-            exportEnable = plugin.Config.Bind("Enable Export", "Enable Export", false, "Enable Export");
+            exSerializer.Converters.Add(new SpriteConverter());
         }
-
-        private bool f3 = false;
-        private bool f4 = false;
-        private bool f5 = false;
-        private bool f6 = false;
 
         public void OnUpdate()
         {
             if (exportEnable.Value)
             {
                 // 导出等价Lua脚本
-                bool f3_pressed = Keyboard.current.f3Key.IsPressed();
-                if (f3_pressed && !f3)
+                if (Input.GetKeyDown(KeyCode.F3))
                 {
                     Debug.Log("F3 is pressed");
                     ExportLuaEquivalents();
                 }
-                f3 = f3_pressed;
 
                 // 导出本地化文件
-                bool f4_pressed = Keyboard.current.f4Key.IsPressed();
-                if (f4_pressed && !f4)
+                if (Input.GetKeyDown(KeyCode.F4))
                 {
                     Debug.Log("F4 is pressed");
                     ExportLocalizations();
                 }
-                f4 = f4_pressed;
 
                 // 导出头像库
-                bool f5_pressed = Keyboard.current.f5Key.IsPressed();
-                if (f5_pressed && !f5)
+                if (Input.GetKeyDown(KeyCode.F5) && exportImage.Value)
                 {
                     Debug.Log("F5 is pressed");
                     ExportPortraits();
                 }
-                f5 = f5_pressed;
 
                 // 导出数据表
-                bool f6_pressed = Keyboard.current.f6Key.IsPressed();
-                if (f6_pressed && !f6)
+                if (Input.GetKeyDown(KeyCode.F6))
                 {
                     Debug.Log("F6 is pressed");
-                    ExportDataTables();
+                    HookDataTable.ExportDataTables(exportDir.Value);
                 }
-                f6 = f6_pressed;
             }
         }
 
         public static void ExportLocalizations()
         {
-            var exportPath = "./StringTable.csv";
+            var exportPath = Path.Combine(exportDir.Value, "StringTable.csv");
             var sb = new StringBuilder();
             foreach (var pair in LeanLocalization.CurrentTranslations)
             {
@@ -115,7 +102,7 @@ namespace Mortal
         public static void ExportPortraits()
         {
             exportingPortaits = true;
-            exportPortraitDir = "./Portraits/";
+            exportPortraitDir = Path.Combine(exportDir.Value, "Portraits");
             if (!Directory.Exists(exportPortraitDir))
                 Directory.CreateDirectory(exportPortraitDir);
             var characterConfig = Traverse.Create(CharacterPlaceholder.Instance).Field("_config").GetValue<StoryCharacterConfig>();
@@ -125,7 +112,7 @@ namespace Mortal
                 if (characterData.DefaultPortrait)
                 {
                     string defaultFileName = $"{characterData.Id}.png";
-                    ExportPortrait(defaultFileName, characterData.DefaultPortrait);
+                    ExportSprite(defaultFileName, characterData.DefaultPortrait);
                 }
                 characterData.GetPortraitList();
             }
@@ -176,19 +163,19 @@ namespace Mortal
 
             string portraitTypeName = portraitTypeToString[type];
             string portraitFileName = $"{__instance.Id}_{portraitTypeName}.png";
+            string exportPath = Path.Combine(exportPortraitDir, portraitFileName);
             Debug.Log($"ModSupport: GetPortraitSprite {portraitFileName}");
             if (__result != null)
             {
-                ExportPortrait(portraitFileName, __result);
+                ExportSprite(exportPath, __result);
             }
         }
 
-        public static void ExportPortrait(string filename, Sprite sprite)
+        public static void ExportSprite(string path, Sprite sprite)
         {
-            var exportPath = Path.Combine(exportPortraitDir, filename);
-            if (File.Exists(exportPath))
+            if (File.Exists(path))
                 return;
-            File.WriteAllBytes(exportPath, MakeReadable(sprite.texture).EncodeToPNG());
+            File.WriteAllBytes(path, MakeReadable(sprite.texture).EncodeToPNG());
         }
 
         static StatModifyManager statModifyManager = null;
@@ -205,7 +192,7 @@ namespace Mortal
         {
             Traverse cpm = Traverse.Create(CheckPointManager.Instance);
             {
-                var exportPath = "./LuaEquivalent/Position/";
+                var exportPath = Path.Combine(exportDir.Value, "LuaEquivalent/Position");
                 if (!Directory.Exists(exportPath))
                 {
                     Directory.CreateDirectory(exportPath);
@@ -220,7 +207,7 @@ namespace Mortal
                 Debug.Log($"export {list.Count} positions");
             }
             {
-                var exportPath = "./LuaEquivalent/Condition/";
+                var exportPath = Path.Combine(exportDir.Value, "LuaEquivalent/Condition");
                 if (!Directory.Exists(exportPath))
                 {
                     Directory.CreateDirectory(exportPath);
@@ -236,7 +223,7 @@ namespace Mortal
                 Debug.Log($"export {list.Count} conditions");
             }
             {
-                var exportPath = "./LuaEquivalent/Switch/";
+                var exportPath = Path.Combine(exportDir.Value, "LuaEquivalent/Switch");
                 if (!Directory.Exists(exportPath))
                 {
                     Directory.CreateDirectory(exportPath);
@@ -256,103 +243,6 @@ namespace Mortal
             }
         }
 
-        public static List<Type> SoTypes
-        {
-            get
-            {
-                if (_so_types != null)
-                {
-                    return _so_types;
-                }
-                Assembly[] assemblies = new Assembly[]
-                {
-                Assembly.GetAssembly(typeof(MissionData)), // Mortal.Core
-                Assembly.GetAssembly(typeof(DiceResultData)),// Mortal.Story
-                Assembly.GetAssembly(typeof(CombatLevel)), // Mortal.Combat
-                Assembly.GetAssembly(typeof(DropItem)), // Mortal.Battle
-                Assembly.GetAssembly(typeof(FreePositionData)), // Mortal.Free
-                };
-                _so_types = new List<Type>();
-                foreach (var assembly in assemblies)
-                {
-                    foreach (var type in assembly.GetTypes())
-                    {
-                        if (!type.IsAbstract && !type.IsGenericType && typeof(ScriptableObject).IsAssignableFrom(type))
-                        {
-                            Debug.Log($"Find ScriptableObject type = {type.Name}");
-                            _so_types.Add(type);
-                        }
-                    }
-                }
-                return _so_types;
-            }
-        }
-        private static List<Type> _so_types = null;
-
-        public static void ExportDataTables()
-        {
-            var exportPath = "./DataTable/";
-            if (!Directory.Exists(exportPath))
-            {
-                Directory.CreateDirectory(exportPath);
-            }
-
-            foreach (var so_type in SoTypes)
-            {
-                var soArray = Resources.FindObjectsOfTypeAll(so_type);
-                Debug.Log($"Find so_type {so_type.Name}, count = {soArray.Length}");
-                if (soArray.Length > 1) // 一个以上的才可谓“表”
-                {
-                    var dir = Path.Combine(exportPath, so_type.Name);
-                    foreach (var item in soArray)
-                    {
-                        ScriptableObject so = item as ScriptableObject;
-                        if (so != null && !(so is CombatStateEffectUnitScriptable))
-                        {
-                            if (!Directory.Exists(dir))
-                            {
-                                Directory.CreateDirectory(dir);
-                            }
-                            File.WriteAllText(Path.Combine(dir, so.name + ".json"), ToJson(so, exSerializer).ToString());
-                        }
-                    }
-                }
-            }
-        }
-
-        public static Dictionary<string, ScriptableObject> SoResolveLater = new Dictionary<string, ScriptableObject>();
-        public static void FromJsonString(ref ScriptableObject obj, string jsonString)
-        {
-            JObject jobj = JObject.Parse(jsonString);
-            var t = Traverse.Create(obj);
-            foreach (var field in jobj.Properties())
-            {
-                var tField = t.Field(field.Name);
-                if (tField == null)
-                {
-                    Debug.Log($"Warning: {t.GetValueType().Name} cannot find field {field.Name}, skip!");
-                    continue;
-                }
-                tField.SetValue(field.Value.ToObject(tField.GetValueType(), exSerializer));
-            }
-
-            //Debug.Log(ToJson(obj, exSerializer).ToString());
-        }
-
-        static JToken ToJson(ScriptableObject obj, JsonSerializer serializer)
-        {
-            JObject token = new JObject();
-            foreach (var field in GetSerializedFields(obj.GetType(), typeof(ScriptableObject)))
-            {
-                var value = field.GetValue(obj);
-                if (value != null)
-                {
-                    token.Add(field.Name, JToken.FromObject(value, serializer));
-                }
-            }
-            return token;
-        }
-
         static bool IsSerializedField(FieldInfo field)
         {
             if (field.IsPublic)
@@ -370,7 +260,7 @@ namespace Mortal
 
         static readonly Dictionary<Type, List<FieldInfo>> SerialzedFieldCache = new Dictionary<Type, List<FieldInfo>>();
 
-        static IEnumerable<FieldInfo> GetSerializedFields(Type type, Type baseType)
+        public static IEnumerable<FieldInfo> GetSerializedFields(Type type, Type baseType)
         {
             if (SerialzedFieldCache.TryGetValue(type, out List<FieldInfo> cache))
             {
@@ -432,21 +322,13 @@ namespace Mortal
                 JObject jobj = JObject.Load(reader);
                 var soType = (string)jobj["so.type"];
                 var soName = (string)jobj["so.name"];
-                Type realType = HookExporter.SoTypes.FirstOrDefault(item => item.Name == soType);
-                if (realType != null && !objectType.IsAssignableFrom(realType))
+                Type realType = HookDataTable.SoTypes.FirstOrDefault(type => type.Name == soType);
+                if (!objectType.IsAssignableFrom(realType))
                 {
-                    Debug.Log($"ReadJson: type unmatch, need {objectType.Name}, get {soType}!");
+                    Debug.LogError($"ReadJson: type unmatch, need {objectType.Name}, get {soType}!");
                     return null;
                 }
-                var soArray = Resources.FindObjectsOfTypeAll(realType);
-                var so = soArray.FirstOrDefault(item => item.name == soName);
-                if (so == null)
-                {
-                    Debug.Log($"ReadJson: {soType}.{soName} not found, add new one later");
-                    so = ScriptableObject.CreateInstance(realType);
-                    HookExporter.SoResolveLater.Add(soType + "." + soName, so as ScriptableObject);
-                }
-                return so;
+                return HookDataTable.RecursiveParseSo(realType, soName);
             }
 
             public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
@@ -511,6 +393,47 @@ namespace Mortal
                     token.Add(field.Name, JToken.FromObject(field.GetValue(value), serializer));
                 }
                 token.WriteTo(writer);
+            }
+        }
+        /// <summary>
+        /// 图片要特殊处理
+        /// </summary>
+        public class SpriteConverter : JsonConverter
+        {
+            public override bool CanConvert(Type objectType)
+            {
+                return typeof(Sprite) == objectType;
+            }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                string fullPath = HookMods.FindModFile(reader.Value.ToString());
+                if (string.IsNullOrEmpty(fullPath))
+                    return existingValue;
+                return HookMods.LoadSprite(fullPath);
+            }
+
+            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            {
+                Sprite sprite = (Sprite)value;
+                if (sprite == null)
+                {
+                    return;
+                }
+                JToken jobj = $"Sprite/{sprite.name}.png";
+                jobj.WriteTo(writer);
+
+                if (exportImage.Value)
+                {
+                    var exportPath = Path.Combine(exportDir.Value, "Sprite");
+                    if (!Directory.Exists(exportPath))
+                    {
+                        Directory.CreateDirectory(exportPath);
+                    }
+                    string spriteName = $"{exportPath}/{sprite.name}.png";
+                    Debug.Log($"ModSupport: Export Sprite {spriteName}");
+                    ExportSprite(spriteName, sprite);
+                }
             }
         }
     }
