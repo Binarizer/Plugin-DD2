@@ -143,6 +143,10 @@
       <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>E:\SteamLibrary\steamapps\common\LegendOfMortal\Mortal_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>False</Private>

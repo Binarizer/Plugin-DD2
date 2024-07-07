@@ -3,6 +3,12 @@ using System.Collections.Generic;
 using HarmonyLib;
 using BepInEx;
 using BepInEx.Unity.Mono;
+using Mortal.Battle;
+using Mortal.Core;
+using UnityEngine;
+using Mortal.Story;
+using Fungus;
+using MoonSharp.Interpreter;
 
 namespace Mortal
 {
@@ -33,11 +39,46 @@ namespace Mortal
 
         void Update()
         {
-            //Console.WriteLine("Main Update: ");
             foreach (IHook hook in hooks)
             {
                 hook.OnUpdate();
             }
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                consoleOn = !consoleOn;
+            }
+        }
+
+        bool consoleOn = true;
+        LuaEnvironment luaEnv = null;
+        Rect consoleRect = new Rect(10, Screen.height - 100, 500, 80);
+        string luaCmd = "";
+        string luaRet = "";
+        private void OnGUI()
+        {
+            luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
+            consoleOn = consoleOn && luaEnv != null;
+            if (consoleOn)
+            {
+                consoleRect = GUI.Window(857205, consoleRect, new GUI.WindowFunction(DoWindow), "lua console");
+            }
+        }
+        public void DoWindow(int windowID)
+        {
+            GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal();
+            luaCmd = GUILayout.TextField(luaCmd, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("run", GUILayout.Width(60)))
+            {
+                luaEnv?.DoLuaString(luaCmd, "Console.cmd", false, delegate (DynValue res)
+                {
+                    luaRet = res.ToString();
+                });
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.Label($"Return = {luaRet}");
+            GUILayout.EndVertical();
+            GUI.DragWindow();
         }
     }
 }
