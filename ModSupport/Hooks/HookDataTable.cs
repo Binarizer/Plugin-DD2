@@ -7,6 +7,8 @@ using Mortal.Free;
 using Mortal.Story;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using OBB.Framework.Data;
+using OBB.Framework.ScriptableEvent;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,6 +76,7 @@ namespace Mortal
                     Assembly.GetAssembly(typeof(CombatLevel)), // Mortal.Combat
                     Assembly.GetAssembly(typeof(DropItem)), // Mortal.Battle
                     Assembly.GetAssembly(typeof(FreePositionData)), // Mortal.Free
+                    Assembly.GetAssembly(typeof(StoryMappingItem)), // OBB.Framework
                 };
                 _so_types = new List<Type>();
                 foreach (var assembly in assemblies)
@@ -317,6 +320,8 @@ namespace Mortal
             typeof(ShopItemsData),
             typeof(ShopItemTimeData),
             typeof(SpecialItem),
+            typeof(StoryMappingItem),
+            typeof(StringGameEvent),
             typeof(UpgradeItemCollectionData),
             typeof(UpgradeItemData),
             typeof(UpgradeItemStatConvertData),

@@ -12,6 +12,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OBB.Framework.Attributes;
+using OBB.Framework.Data;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -325,7 +326,7 @@ namespace Mortal
                 Type realType = HookDataTable.SoTypes.FirstOrDefault(type => type.Name == soType);
                 if (!objectType.IsAssignableFrom(realType))
                 {
-                    Debug.LogError($"ReadJson: type unmatch, need {objectType.Name}, get {soType}!");
+                    Debug.LogError($"ReadJson: type unmatch, need {objectType.Name}, get {realType?.Name}!");
                     return null;
                 }
                 return HookDataTable.RecursiveParseSo(realType, soName);
@@ -355,7 +356,18 @@ namespace Mortal
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
-                throw new NotImplementedException();
+                StatValueReference ret = new StatValueReference();
+                var t = Traverse.Create(ret);
+                JObject jobj = JObject.Load(reader);
+                foreach (var prop in jobj)
+                {
+                    var field = t.Field(prop.Key);
+                    if (field != null)
+                    {
+                        field.SetValue(prop.Value.ToObject(field.GetValueType(), serializer));
+                    }
+                }
+                return ret;
             }
 
             readonly Dictionary<StatCheckType, List<string>> fieldDict = new Dictionary<StatCheckType, List<string>>
