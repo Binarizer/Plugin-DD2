@@ -20,6 +20,7 @@ namespace Mortal
     public class HookMods : IHook
     {
         private static ConfigEntry<string> modName;
+        private static ConfigEntry<bool> gifEnable;
 
         public IEnumerable<Type> GetRegisterTypes()
         {
@@ -35,6 +36,7 @@ namespace Mortal
         readonly static Dictionary<string, string> mapVoice = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
         readonly static Dictionary<string, Sprite> cacheSprite = new Dictionary<string, Sprite>();
+        readonly static Dictionary<string, Gif> mapGif = new Dictionary<string, Gif>();
 
         static Component luaExt = null; // 外挂自定义lua解析器
         static WaveOutEvent waveOut = new WaveOutEvent();   // 外挂音频处理
@@ -70,6 +72,7 @@ namespace Mortal
         public void OnRegister(BaseUnityPlugin plugin)
         {
             modName = plugin.Config.Bind("Mod Support", "Mod Name", "test", "Mod Name");
+            gifEnable = plugin.Config.Bind("Mod Support", "Gif Enable", true, "Enable import gif");
             luaExt = plugin.gameObject.AddComponent<LuaExt>();
 
             if (string.IsNullOrEmpty(modName.Value))
@@ -143,7 +146,7 @@ namespace Mortal
                 string portraitDir = Path.Combine(modPath, "Portraits");
                 if (Directory.Exists(portraitDir))
                 {
-                    foreach (string file in Directory.EnumerateFiles(modPath, "*.png", SearchOption.AllDirectories))
+                    foreach (string file in Directory.EnumerateFiles(portraitDir, "*.*", SearchOption.AllDirectories))
                     {
                         AddFile(mapPortrait, file);
                     }
@@ -153,7 +156,7 @@ namespace Mortal
                 string voiceDir = Path.Combine(modPath, "Voice");
                 if (Directory.Exists(voiceDir))
                 {
-                    foreach (string file in Directory.EnumerateFiles(modPath, "*.mp3", SearchOption.AllDirectories))
+                    foreach (string file in Directory.EnumerateFiles(voiceDir, "*.mp3", SearchOption.AllDirectories))
                     {
                         AddFile(mapVoice, file);
                     }
@@ -180,6 +183,17 @@ namespace Mortal
 
         public void OnUpdate()
         {
+            if (gifEnable.Value && mapGif.Count > 0)
+            {
+                UnityEngine.UI.Image[] images = UnityEngine.Object.FindObjectsOfType<UnityEngine.UI.Image>();
+                foreach (var image in images)
+                {
+                    if (mapGif.ContainsKey(image.gameObject.name))
+                    {
+                        mapGif[image.gameObject.name].Update(image);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -402,28 +416,72 @@ namespace Mortal
             return true;
         }
 
+        public class Gif
+        {
+            public List<Sprite> frames = new List<Sprite>();
+            public List<float> delay = new List<float>();
+            private float time = 0.0f;
+            private int frame = 0;
+
+            public void Update(UnityEngine.UI.Image image)
+            {
+                time += Time.deltaTime;
+                if (time >= delay[frame])
+                {
+                    frame = (frame + 1) % frames.Count;
+                    time = 0.0f;
+                    image.sprite = frames[frame];
+                }
+            }
+        }
+
         public static Sprite LoadSprite(string filePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
         {
             if (cacheSprite.ContainsKey(filePath))
                 return cacheSprite[filePath];
+            if (!File.Exists(filePath))
+                return null;
 
-            Texture2D tex2D;
-            byte[] fileData;
-
-            if (File.Exists(filePath))
+            var name = Path.GetFileNameWithoutExtension(filePath);
+            var ext = Path.GetExtension(filePath).ToLower();
+            if (ext == ".png")
             {
-                fileData = File.ReadAllBytes(filePath);
-                tex2D = new Texture2D(2, 2);
-                if (tex2D.LoadImage(fileData))
+                byte[] data = File.ReadAllBytes(filePath);
+                Texture2D tex2D = new Texture2D(2, 2);
+                if (tex2D.LoadImage(data))
                 {
                     Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
-                    sprite.name = Path.GetFileNameWithoutExtension(filePath);
+                    sprite.name = name;
                     cacheSprite.Add(filePath, sprite);
                     return sprite;
                 }
             }
+            else if (ext == ".gif")
+            {
+                byte[] data = File.ReadAllBytes(filePath);
+                using (var decoder = new MG.GIF.Decoder(data))
+                {
+                    Texture2D tex2D;
+                    var img = decoder.NextImage();
+                    if (img == null)
+                        return null;
+
+                    var gif = new Gif();
+                    Debug.Log($"Add gif {name}");
+                    mapGif.Add(name, gif);
+                    while (img != null)
+                    {
+                        tex2D = img.CreateTexture();
+                        Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                        gif.frames.Add(sprite);
+                        gif.delay.Add(img.Delay * 0.001f);
+                        img = decoder.NextImage();
+                    }
+                    cacheSprite.Add(filePath, gif.frames[0]);
+                    return gif.frames[0];
+                }
+            }
             return null;
         }
-
     }
 }
