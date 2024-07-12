@@ -398,6 +398,15 @@ namespace Mortal
             string portraitName = $"{__instance.Id}";
             return ReplacePortrait(portraitName, ref __result);
         }
+        [HarmonyPostfix, HarmonyPatch(typeof(PortraitState), "SetPortraitImageBySprite", new Type[] { typeof(Sprite)})]
+        public static void SetPortraitImageBySprite_Post(ref PortraitState __instance, Sprite portrait)
+        {
+            if (__instance.portraitImage == null)
+            {
+                // GIF的话，指针是对不上的，需要用名字再搜一下
+                __instance.portraitImage = __instance.allPortraits.Find(x => x.sprite.name == portrait.name);
+            }
+        }
 
         public static bool ReplacePortrait(string portraitName, ref Sprite __result)
         {
@@ -473,6 +482,7 @@ namespace Mortal
                     {
                         tex2D = img.CreateTexture();
                         Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                        sprite.name = name;
                         gif.frames.Add(sprite);
                         gif.delay.Add(img.Delay * 0.001f);
                         img = decoder.NextImage();

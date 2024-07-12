@@ -138,7 +138,7 @@ namespace Mortal
             {
                 var soArray = Resources.FindObjectsOfTypeAll(so_type);
                 Debug.Log($"Find so_type {so_type.Name}, count = {soArray.Length}");
-                if (soArray.Length > 1) // 一个以上的才可谓“表”
+                if (soArray.Length > 0) // 一个以上的才可谓“表”
                 {
                     var dir = Path.Combine(exportPath, so_type.Name);
                     foreach (var item in soArray)
