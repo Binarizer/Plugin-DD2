@@ -447,6 +447,47 @@ namespace Mortal
                     ExportSprite(spriteName, sprite);
                 }
             }
+            /// <summary>
+            /// 图片Data也要特殊处理
+            /// </summary>
+            public class SpriteDataConverter : JsonConverter
+            {
+                public override bool CanConvert(Type objectType)
+                {
+                    return typeof(SpriteData) == objectType;
+                }
+
+                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+                {
+                    string fullPath = HookMods.FindModFile(reader.Value.ToString());
+                    if (string.IsNullOrEmpty(fullPath))
+                        return existingValue;
+                    return HookMods.LoadSprite(fullPath);
+                }
+
+                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+                {
+                    Sprite sprite = (Sprite)value;
+                    if (sprite == null)
+                    {
+                        return;
+                    }
+                    JToken jobj = $"Sprite/{sprite.name}.png";
+                    jobj.WriteTo(writer);
+
+                    if (exportImage.Value)
+                    {
+                        var exportPath = Path.Combine(exportDir.Value, "Sprite");
+                        if (!Directory.Exists(exportPath))
+                        {
+                            Directory.CreateDirectory(exportPath);
+                        }
+                        string spriteName = $"{exportPath}/{sprite.name}.png";
+                        Debug.Log($"ModSupport: Export Sprite {spriteName}");
+                        ExportSprite(spriteName, sprite);
+                    }
+                }
+            }
         }
     }
 }

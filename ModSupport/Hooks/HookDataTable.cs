@@ -56,6 +56,13 @@ namespace Mortal
                 SoInject(SoTypes_Combat);
                 InjectedCombat = true;
             }
+
+            if (!InjectedStory && scene.name == "Story")
+            {
+                // 剧本时插入改动
+                SoInject(SoTypes_Story);
+                InjectedStory = true;
+            }
         }
 
         /// <summary>
@@ -348,5 +355,22 @@ namespace Mortal
             }
         }
         static Type[] _soTypes_Combat = null;
+
+        static bool InjectedStory = false;
+        static Type[] SoTypes_Story
+        {
+            get
+            {
+                return _soTypes_Story;
+            }
+        }
+        static Type[] _soTypes_Story = new Type[]
+        {
+            typeof(DiceResultConfig),
+            typeof(PositionResultConfig),
+            typeof(ConditionResultConfig),
+            typeof(SwitchResultConfig),
+            typeof(SpriteCollectionData),
+        };
     }
 }
