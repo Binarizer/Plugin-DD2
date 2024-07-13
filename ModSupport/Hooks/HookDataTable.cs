@@ -36,6 +36,8 @@ namespace Mortal
         {
         }
 
+        public readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
+
         public void InjectSoMods(Scene scene, LoadSceneMode sceneType)
         {
             if (scene == null)
@@ -61,8 +63,56 @@ namespace Mortal
             {
                 // 剧本时插入改动
                 SoInject(SoTypes_Story);
+                if (mapPortrait.Count > 0)
+                    LinkStoryPortraits();
                 InjectedStory = true;
             }
+        }
+
+        /// <summary>
+        /// 兼容最初的剧本式头像替换规则
+        /// </summary>
+        void LinkStoryPortraits()
+        {
+            var mappings = Resources.FindObjectsOfTypeAll<StoryMappingItem>();
+            var datas = Resources.FindObjectsOfTypeAll<StoryCharacterData>();
+            foreach (var file in mapPortrait)
+            {
+                var param = file.Key.Split('_');
+                if (param.Length != 2)
+                    continue;
+                var mapping = mappings.FirstOrDefault(x => x.Value == param[0]);
+                if (mapping == null)
+                    continue;
+                var data = datas.FirstOrDefault(x => Traverse.Create(x).Field("_mapping").GetValue<StoryMappingItem>() == mapping);
+                if (data == null)
+                    continue;
+                var t = Traverse.Create(data);
+                var field = t.Fields().FirstOrDefault(x => x.ToLower() == param[1].ToLower());
+                if (field == null)
+                    continue;
+                var sprite = HookMods.LoadSprite(file.Value);
+                if (sprite != null)
+                    t.Field(field).SetValue(sprite);
+            }
+        }
+
+        /// <summary>
+        /// 界面UI主角头像，用player_normal替换
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(PlayerAvatarPanel), "OnEnable")]
+        public static bool PlayerPortrait_Replace(ref PlayerAvatarPanel __instance)
+        {
+            if (!mapPortrait.TryGetValue("player_normal", out string path))
+                return true;
+            var sprite = HookMods.LoadSprite(path);
+            if (sprite == null)
+                return true;
+            sprite.name = "player_normal";
+            var image = Traverse.Create(__instance).Field("_avatarImage").GetValue<UnityEngine.UI.Image>();
+            image.sprite = sprite;
+            image.name = "player_normal";
+            return false;
         }
 
         /// <summary>
@@ -284,24 +334,14 @@ namespace Mortal
                 }
                 tField.SetValue(field.Value.ToObject(tField.GetValueType(), HookExporter.exSerializer));
             }
-
-            //Debug.Log(ToJson(obj, HookExporter.exSerializer).ToString());
         }
 
-        static bool InjectedTitle = false;
-
+        public static bool InjectedTitle = false;
         /// <summary>
         /// 进入Title场景即被完整加载的So类型集合
-        /// 常驻
         /// </summary>
-        static Type[] SoTypes_Title
-        {
-            get 
-            {
-                return _soTypes_Title;
-            } 
-        }
-        static Type[] _soTypes_Title = new Type[]
+        public static Type[] SoTypes_Title => _soTypes_Title;
+        private static Type[] _soTypes_Title = new Type[]
         {
             typeof(BattleSkillData),
             typeof(BattleTeamStat),
@@ -342,7 +382,7 @@ namespace Mortal
         /// 进入Combat场景即被完整加载的So类型集合
         /// 基本都是以Combat开头的
         /// </summary>
-        static Type[] SoTypes_Combat
+        public static Type[] SoTypes_Combat
         {
             get
             {
@@ -354,23 +394,24 @@ namespace Mortal
                 return _soTypes_Combat;
             }
         }
-        static Type[] _soTypes_Combat = null;
+        private static Type[] _soTypes_Combat = null;
 
-        static bool InjectedStory = false;
-        static Type[] SoTypes_Story
-        {
-            get
-            {
-                return _soTypes_Story;
-            }
-        }
-        static Type[] _soTypes_Story = new Type[]
+        public static bool InjectedStory = false;
+        public static Type[] SoTypes_Story => _soTypes_Story;
+        private static Type[] _soTypes_Story = new Type[]
         {
             typeof(DiceResultConfig),
+            typeof(DiceResultData),
             typeof(PositionResultConfig),
+            typeof(PositionResultData),
             typeof(ConditionResultConfig),
+            typeof(ConditionResultData),
             typeof(SwitchResultConfig),
+            typeof(SwitchResultData),
+            typeof(StoryCharacterConfig),
+            typeof(StoryCharacterData),
             typeof(SpriteCollectionData),
+            typeof(SpriteData),
         };
     }
 }

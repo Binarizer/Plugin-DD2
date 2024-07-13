@@ -2,17 +2,13 @@
 using BepInEx.Unity.Mono;
 using HarmonyLib;
 using Lean.Localization;
-using Mortal.Battle;
-using Mortal.Combat;
 using Mortal.Core;
-using Mortal.Free;
 using Mortal.Story;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OBB.Framework.Attributes;
-using OBB.Framework.Data;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -445,47 +441,6 @@ namespace Mortal
                     string spriteName = $"{exportPath}/{sprite.name}.png";
                     Debug.Log($"ModSupport: Export Sprite {spriteName}");
                     ExportSprite(spriteName, sprite);
-                }
-            }
-            /// <summary>
-            /// 图片Data也要特殊处理
-            /// </summary>
-            public class SpriteDataConverter : JsonConverter
-            {
-                public override bool CanConvert(Type objectType)
-                {
-                    return typeof(SpriteData) == objectType;
-                }
-
-                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-                {
-                    string fullPath = HookMods.FindModFile(reader.Value.ToString());
-                    if (string.IsNullOrEmpty(fullPath))
-                        return existingValue;
-                    return HookMods.LoadSprite(fullPath);
-                }
-
-                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-                {
-                    Sprite sprite = (Sprite)value;
-                    if (sprite == null)
-                    {
-                        return;
-                    }
-                    JToken jobj = $"Sprite/{sprite.name}.png";
-                    jobj.WriteTo(writer);
-
-                    if (exportImage.Value)
-                    {
-                        var exportPath = Path.Combine(exportDir.Value, "Sprite");
-                        if (!Directory.Exists(exportPath))
-                        {
-                            Directory.CreateDirectory(exportPath);
-                        }
-                        string spriteName = $"{exportPath}/{sprite.name}.png";
-                        Debug.Log($"ModSupport: Export Sprite {spriteName}");
-                        ExportSprite(spriteName, sprite);
-                    }
                 }
             }
         }

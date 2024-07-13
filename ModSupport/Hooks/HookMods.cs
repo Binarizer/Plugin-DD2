@@ -7,11 +7,9 @@ using MoonSharp.Interpreter;
 using Mortal.Core;
 using Mortal.Story;
 using NAudio.Wave;
-using OBB.Framework.Attributes;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using UnityEngine;
 
 namespace Mortal
@@ -34,7 +32,6 @@ namespace Mortal
         readonly static Dictionary<string, string> mapPosition = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapString = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapVoice = new Dictionary<string, string>();
-        readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
         readonly static Dictionary<string, Sprite> cacheSprite = new Dictionary<string, Sprite>();
         readonly static Dictionary<string, Gif> mapGif = new Dictionary<string, Gif>();
 
@@ -45,7 +42,7 @@ namespace Mortal
         {
             var key = Path.GetFileNameWithoutExtension(file);
             if (!dict.ContainsKey(file))
-            {           
+            {
                 Debug.Log($"ModSupport: Add file {file}");
                 dict.Add(key, file);
             }
@@ -58,7 +55,7 @@ namespace Mortal
         /// </summary>
         public static string FindModFile(string path)
         {
-            foreach(var modPath in ModPaths)
+            foreach (var modPath in ModPaths)
             {
                 var fullPath = Path.Combine(modPath, path);
                 if (File.Exists(fullPath))
@@ -82,7 +79,7 @@ namespace Mortal
             }
 
             var mods = modName.Value.Trim().Split(',');
-            foreach (var mod in mods )
+            foreach (var mod in mods)
             {
                 var modPath = Path.Combine(ModRootPath, mod);
                 if (!Directory.Exists(modPath))
@@ -142,13 +139,13 @@ namespace Mortal
                     Debug.Log($"ModSupport: Add {lines} lines to StringTable.");
                 }
 
-                // 外部读取头像
+                // 外部读取头像(挪到HookDataTable)
                 string portraitDir = Path.Combine(modPath, "Portraits");
                 if (Directory.Exists(portraitDir))
                 {
                     foreach (string file in Directory.EnumerateFiles(portraitDir, "*.*", SearchOption.AllDirectories))
                     {
-                        AddFile(mapPortrait, file);
+                        AddFile(HookDataTable.mapPortrait, file);
                     }
                 }
 
@@ -173,10 +170,9 @@ namespace Mortal
             var csvLines = parser.Parse(data);
             foreach (var line in csvLines)
             {
-                if (!string.IsNullOrEmpty(line[0]) && !mapString.ContainsKey(line[0]))
-                {
-                    mapString.Add(line[0], line[1]);
-                }
+                if (string.IsNullOrEmpty(line[0]) || mapString.ContainsKey(line[0]))
+                    continue;
+                mapString.Add(line[0], line[1]);
             }
             return csvLines.Length;
         }
@@ -188,12 +184,35 @@ namespace Mortal
                 UnityEngine.UI.Image[] images = UnityEngine.Object.FindObjectsOfType<UnityEngine.UI.Image>();
                 foreach (var image in images)
                 {
-                    if (mapGif.ContainsKey(image.gameObject.name))
-                    {
-                        mapGif[image.gameObject.name].Update(image);
-                    }
+                    if (image.sprite == null || string.IsNullOrEmpty(image.sprite.name))
+                        continue;
+                    if (mapGif.TryGetValue(image.sprite.name, out Gif gif))
+                        gif.Update(image);
                 }
             }
+        }
+
+        /// <summary>
+        /// Gif换图时，保持Sprite判定为同一张，防止换图时被错误隐藏
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(PortraitController), "Show", new Type[] { typeof(PortraitOptions) })]
+        public static bool PortraitShow_GifIdentity(PortraitOptions options)
+        {
+            if (!options.portrait || !options.character.State.portrait)
+                return true;
+            if (options.portrait.name == options.character.State.portrait.name)
+                options.portrait = options.character.State.portrait;
+            return true;
+        }
+
+        /// <summary>
+        /// Gif换图时，保持Sprite判定为同一张，防止换图导致的Fungus崩溃
+        /// </summary>
+        [HarmonyPostfix, HarmonyPatch(typeof(PortraitState), "SetPortraitImageBySprite", new Type[] { typeof(Sprite) })]
+        public static void SetPortraitImageBySprite_Post(ref PortraitState __instance, Sprite portrait)
+        {
+            if (__instance.portraitImage == null)
+                __instance.portraitImage = __instance.allPortraits.Find(x => x.sprite.name == portrait.name);
         }
 
         /// <summary>
@@ -320,13 +339,10 @@ namespace Mortal
         public static bool PositionRedirect(string name, ref string __result)
         {
             if (!mapPosition.ContainsKey(name))
-            {
                 return true;
-            }
 
             Debug.Log($"ModSupport: Find external Position lua {name}");
             string script = File.ReadAllText(mapPosition[name]);
-            Debug.Log($"Lua={script}");
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string result = "";
             luaEnv.DoLuaString(script, "tmp.Position", false, delegate (DynValue res)
@@ -334,7 +350,6 @@ namespace Mortal
                 result = res.String;
             });
             __result = result;
-            Debug.Log($"Result={__result}");
             return false;
         }
 
@@ -368,69 +383,20 @@ namespace Mortal
             return false;
         }
 
-        static Dictionary<PortraitType, string> portraitTypeToString = null;
-        /// <summary>
-        /// 重定向头像
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterData), "GetPortraitSprite", new Type[] { typeof(PortraitType) })]
-        public static bool GetPortraitSprite_Redirect(ref StoryCharacterData __instance, ref Sprite __result, PortraitType type)
-        {
-            if (portraitTypeToString == null)
-            {
-                // 构造头像类型到string的映射
-                portraitTypeToString = new Dictionary<PortraitType, string>();
-                foreach (PortraitType value in Enum.GetValues(typeof(PortraitType)))
-                {
-                    FieldInfo field = typeof(PortraitType).GetField(value.ToString());
-                    var stringValueAttribute = Attribute.GetCustomAttribute(field, typeof(StringValueAttribute)) as StringValueAttribute;
-                    portraitTypeToString.Add(value, stringValueAttribute.StringValue);
-                }
-            }
-
-            string portraitTypeName = portraitTypeToString[type];
-            string portraitName = $"{__instance.Id}_{portraitTypeName}";
-            return ReplacePortrait(portraitName, ref __result);
-        }
-
-        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterData), "DefaultPortrait", MethodType.Getter)]
-        public static bool DefaultPortrait_Redirect(ref StoryCharacterData __instance, ref Sprite __result)
-        {
-            string portraitName = $"{__instance.Id}";
-            return ReplacePortrait(portraitName, ref __result);
-        }
-        [HarmonyPostfix, HarmonyPatch(typeof(PortraitState), "SetPortraitImageBySprite", new Type[] { typeof(Sprite)})]
-        public static void SetPortraitImageBySprite_Post(ref PortraitState __instance, Sprite portrait)
-        {
-            if (__instance.portraitImage == null)
-            {
-                // GIF的话，指针是对不上的，需要用名字再搜一下
-                __instance.portraitImage = __instance.allPortraits.Find(x => x.sprite.name == portrait.name);
-            }
-        }
-
-        public static bool ReplacePortrait(string portraitName, ref Sprite __result)
-        {
-            if (mapPortrait.ContainsKey(portraitName))
-            {
-                Debug.Log($"Find mod portrait {portraitName}");
-                var sprite = LoadSprite(mapPortrait[portraitName]);
-                if (sprite != null)
-                {
-                    sprite.name = portraitName;
-                    __result = sprite;
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         public class Gif
         {
             public List<Sprite> frames = new List<Sprite>();
             public List<float> delay = new List<float>();
             private float time = 0.0f;
             private int frame = 0;
+
+            public Sprite Current => frames[frame];
+
+            public void Reset()
+            {
+                time = 0.0f;
+                frame = 0;
+            }
 
             public void Update(UnityEngine.UI.Image image)
             {
@@ -439,19 +405,23 @@ namespace Mortal
                 {
                     frame = (frame + 1) % frames.Count;
                     time = 0.0f;
-                    image.sprite = frames[frame];
+                    image.sprite = Current;
                 }
             }
         }
-
+        
         public static Sprite LoadSprite(string filePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
         {
             if (cacheSprite.ContainsKey(filePath))
                 return cacheSprite[filePath];
             if (!File.Exists(filePath))
                 return null;
-
             var name = Path.GetFileNameWithoutExtension(filePath);
+            if (mapGif.TryGetValue(name, out Gif gifFound))
+            {
+                gifFound.Reset();
+                return gifFound.Current;
+            }
             var ext = Path.GetExtension(filePath).ToLower();
             if (ext == ".png")
             {
@@ -481,6 +451,7 @@ namespace Mortal
                     while (img != null)
                     {
                         tex2D = img.CreateTexture();
+                        tex2D.name = name;
                         Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
                         sprite.name = name;
                         gif.frames.Add(sprite);

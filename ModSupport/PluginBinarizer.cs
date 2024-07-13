@@ -1,14 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using HarmonyLib;
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Unity.Mono;
-using Mortal.Battle;
-using Mortal.Core;
-using UnityEngine;
-using Mortal.Story;
 using Fungus;
+using HarmonyLib;
 using MoonSharp.Interpreter;
+using Mortal.Story;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
 
 namespace Mortal
 {
