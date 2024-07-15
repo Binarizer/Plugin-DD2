@@ -56,6 +56,8 @@ namespace Mortal
             {
                 // 决斗时插入改动
                 SoInject(SoTypes_Combat);
+                if (mapPortrait.Count > 0)
+                    LinkCombatPortraits();
                 InjectedCombat = true;
             }
 
@@ -70,7 +72,7 @@ namespace Mortal
         }
 
         /// <summary>
-        /// 兼容最初的剧本式头像替换规则
+        /// 剧本头像兼容初版规则
         /// </summary>
         void LinkStoryPortraits()
         {
@@ -94,6 +96,27 @@ namespace Mortal
                 var sprite = HookMods.LoadSprite(file.Value);
                 if (sprite != null)
                     t.Field(field).SetValue(sprite);
+            }
+        }
+
+        /// <summary>
+        /// 战斗状态头像兼容初版规则
+        /// </summary>
+        void LinkCombatPortraits()
+        {
+            var combatStats = Resources.FindObjectsOfTypeAll<CombatStat>();
+            foreach (var file in mapPortrait)
+            {
+                var param = file.Key.Split('_');
+                if (param.Length != 2 || param[1].ToLower() != "normal")
+                    continue;
+                var matches = combatStats.Where(x => x.Name == param[0]);
+                foreach (var match in matches)
+                {
+                    var sprite = HookMods.LoadSprite(file.Value);
+                    if (sprite != null)
+                        match.StatusAvatar = sprite;
+                }
             }
         }
 
