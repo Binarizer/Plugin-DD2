@@ -27,6 +27,7 @@ namespace Mortal
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
         readonly static Dictionary<string, string> mapStory = new Dictionary<string, string>();
+        readonly static Dictionary<string, string> mapPicture = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapCondition = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapSwitch = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapPosition = new Dictionary<string, string>();
@@ -146,6 +147,16 @@ namespace Mortal
                     foreach (string file in Directory.EnumerateFiles(portraitDir, "*.*", SearchOption.AllDirectories))
                     {
                         AddFile(HookDataTable.mapPortrait, file);
+                    }
+                }
+
+                // 外部读取故事图
+                string pictureDir = Path.Combine(modPath, "Picture");
+                if (Directory.Exists(pictureDir))
+                {
+                    foreach (string file in Directory.EnumerateFiles(pictureDir, "*.png", SearchOption.AllDirectories))
+                    {
+                        AddFile(mapPicture, file);
                     }
                 }
 
@@ -463,6 +474,25 @@ namespace Mortal
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// 重定向故事图
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(StoryPicture), "Show", new Type[] { typeof(string) })]
+        public static bool StoryPictureShowPrefix(ref StoryPicture __instance, ref string key)
+        {
+            var fullKey = "pic_" + key;
+            if (!mapPicture.TryGetValue(fullKey, out string path))
+                return true;
+            var sprite = HookMods.LoadSprite(path);
+            if (sprite == null)
+                return true;
+
+            Debug.Log($"ModSupport: Find external picture {key}");
+            Traverse.Create(__instance).Field("_defaultSprite").SetValue(sprite);
+            key = "";
+            return true;
         }
     }
 }

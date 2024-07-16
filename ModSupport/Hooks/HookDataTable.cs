@@ -8,6 +8,7 @@ using Mortal.Story;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OBB.Framework.Data;
+using OBB.Framework.Extensions;
 using OBB.Framework.ScriptableEvent;
 using System;
 using System.Collections.Generic;
@@ -49,6 +50,8 @@ namespace Mortal
             {
                 // 开始菜单加载时插入改动
                 SoInject(SoTypes_Title);
+                if (mapPortrait.Count > 0)
+                    LinkSocialPortraits();
                 InjectedTitle = true;
             }
 
@@ -68,6 +71,48 @@ namespace Mortal
                 if (mapPortrait.Count > 0)
                     LinkStoryPortraits();
                 InjectedStory = true;
+            }
+        }
+
+        /// <summary>
+        /// 列传头像兼容初版规则
+        /// </summary>
+        void LinkSocialPortraits()
+        {
+            var datas = Resources.FindObjectsOfTypeAll<RelationshipStat>();
+            foreach (var file in mapPortrait)
+            {
+                var param = file.Key.Split('_');
+                if (param.Length != 2 || param[1].ToLower() != "normal")
+                    continue;
+                var matches = datas.Where(x => x.Type.GetStringValue() == param[0]);
+                foreach (var match in matches)
+                {
+                    var sprite = HookMods.LoadSprite(file.Value);
+                    if (sprite != null)
+                        Traverse.Create(match).Field("_avatar").SetValue(sprite);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 战斗状态头像兼容初版规则
+        /// </summary>
+        void LinkCombatPortraits()
+        {
+            var combatStats = Resources.FindObjectsOfTypeAll<CombatStat>();
+            foreach (var file in mapPortrait)
+            {
+                var param = file.Key.Split('_');
+                if (param.Length != 2 || param[1].ToLower() != "normal")
+                    continue;
+                var matches = combatStats.Where(x => x.Name == param[0]);
+                foreach (var match in matches)
+                {
+                    var sprite = HookMods.LoadSprite(file.Value);
+                    if (sprite != null)
+                        match.StatusAvatar = sprite;
+                }
             }
         }
 
@@ -96,27 +141,6 @@ namespace Mortal
                 var sprite = HookMods.LoadSprite(file.Value);
                 if (sprite != null)
                     t.Field(field).SetValue(sprite);
-            }
-        }
-
-        /// <summary>
-        /// 战斗状态头像兼容初版规则
-        /// </summary>
-        void LinkCombatPortraits()
-        {
-            var combatStats = Resources.FindObjectsOfTypeAll<CombatStat>();
-            foreach (var file in mapPortrait)
-            {
-                var param = file.Key.Split('_');
-                if (param.Length != 2 || param[1].ToLower() != "normal")
-                    continue;
-                var matches = combatStats.Where(x => x.Name == param[0]);
-                foreach (var match in matches)
-                {
-                    var sprite = HookMods.LoadSprite(file.Value);
-                    if (sprite != null)
-                        match.StatusAvatar = sprite;
-                }
             }
         }
 
@@ -385,6 +409,7 @@ namespace Mortal
             typeof(Misc),
             typeof(MissionCheckData),
             typeof(MissionData),
+            typeof(PlayerTalentDataCollection),
             typeof(PlayerTalentData),
             typeof(RelationshipStat),
             typeof(ShopItemsData),

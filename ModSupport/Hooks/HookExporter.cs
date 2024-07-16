@@ -9,6 +9,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using OBB.Framework.Attributes;
+using OBB.Framework.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -136,7 +137,6 @@ namespace Mortal
             return readableText;
         }
 
-        static Dictionary<PortraitType, string> portraitTypeToString = null;
         /// <summary>
         /// 导出头像
         /// </summary>
@@ -146,19 +146,7 @@ namespace Mortal
             if (!exportEnable.Value || !exportingPortaits)
                 return;
 
-            if (portraitTypeToString == null)
-            {
-                // 构造头像类型到string的映射
-                portraitTypeToString = new Dictionary<PortraitType, string>();
-                foreach (PortraitType value in Enum.GetValues(typeof(PortraitType)))
-                {
-                    FieldInfo field = typeof(PortraitType).GetField(value.ToString());
-                    var stringValueAttribute = Attribute.GetCustomAttribute(field, typeof(StringValueAttribute)) as StringValueAttribute;
-                    portraitTypeToString.Add(value, stringValueAttribute.StringValue);
-                }
-            }
-
-            string portraitTypeName = portraitTypeToString[type];
+            string portraitTypeName = type.GetStringValue();
             string portraitFileName = $"{__instance.Id}_{portraitTypeName}.png";
             string exportPath = Path.Combine(exportPortraitDir, portraitFileName);
             Debug.Log($"ModSupport: GetPortraitSprite {portraitFileName}");
@@ -173,16 +161,6 @@ namespace Mortal
             if (File.Exists(path))
                 return;
             File.WriteAllBytes(path, MakeReadable(sprite.texture).EncodeToPNG());
-        }
-
-        static StatModifyManager statModifyManager = null;
-        /// <summary>
-        /// 挂接StatModifyManager
-        /// </summary>
-        [HarmonyPostfix, HarmonyPatch(typeof(StatModifyManager), "Awake")]
-        public static void StatModifyManager_Get(ref StatModifyManager __instance)
-        {
-            statModifyManager = __instance;
         }
 
         public static void ExportLuaEquivalents()
