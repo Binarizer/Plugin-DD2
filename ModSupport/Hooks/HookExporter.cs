@@ -8,7 +8,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
-using OBB.Framework.Attributes;
 using OBB.Framework.Extensions;
 using System;
 using System.Collections.Generic;

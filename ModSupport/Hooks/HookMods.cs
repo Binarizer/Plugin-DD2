@@ -192,15 +192,40 @@ namespace Mortal
         {
             if (gifEnable.Value && mapGif.Count > 0)
             {
-                UnityEngine.UI.Image[] images = UnityEngine.Object.FindObjectsOfType<UnityEngine.UI.Image>();
-                foreach (var image in images)
-                {
-                    if (image.sprite == null || string.IsNullOrEmpty(image.sprite.name))
-                        continue;
-                    if (mapGif.TryGetValue(image.sprite.name, out Gif gif))
-                        gif.Update(image);
-                }
+                GifUpdate(typeof(UnityEngine.UI.Image));
+                GifUpdate(typeof(SpriteRenderer));
             }
+        }
+
+        static void GifUpdate(Type t)
+        {
+            UnityEngine.Object[] renderers = UnityEngine.Object.FindObjectsOfType(t);
+            foreach (var renderer in renderers)
+            {
+                var traverse = Traverse.Create(renderer).Property("sprite");
+                if (traverse == null)
+                    continue;
+                var sprite = traverse.GetValue<Sprite>();
+                if (sprite == null || string.IsNullOrEmpty(sprite.name))
+                    continue;
+                if (mapGif.TryGetValue(sprite.name, out Gif gif))
+                    gif.Update(traverse);
+            }
+        }
+
+        /// <summary>
+        /// 修改显示的mod名
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(AppVersionText), "Start")]
+        public static bool ChangeVersionText(AppVersionText __instance)
+        {
+            if (string.IsNullOrEmpty(modName.Value))
+                return true;
+            __instance.GetComponent<UnityEngine.UI.Text>().text = $"{Application.version}, mods: {modName.Value}";
+            var rt = __instance.GetComponent<RectTransform>();
+            rt.offsetMax = new Vector2(2000, rt.offsetMax.y);
+            rt.sizeDelta = new Vector2(2000, rt.sizeDelta.y);
+            return false;
         }
 
         /// <summary>
@@ -409,14 +434,14 @@ namespace Mortal
                 frame = 0;
             }
 
-            public void Update(UnityEngine.UI.Image image)
+            public void Update(Traverse t)
             {
                 time += Time.deltaTime;
                 if (time >= delay[frame])
                 {
                     frame = (frame + 1) % frames.Count;
                     time = 0.0f;
-                    image.sprite = Current;
+                    t.SetValue(Current);
                 }
             }
         }
