@@ -132,9 +132,17 @@ namespace Mortal
                 var data = datas.FirstOrDefault(x => Traverse.Create(x).Field("_mapping").GetValue<StoryMappingItem>() == mapping);
                 if (data == null)
                     continue;
-                var item = data.PortraitResourceList.FirstOrDefault(x => x.Mapping.Value == param[1].ToLower());
+                var mood = param[1].ToLower();
+                var item = data.PortraitResourceList.FirstOrDefault(x => x.Mapping.Value == mood);
                 if (item == null)
-                    continue;
+                {
+                    item = new StoryCharaterImageItem();
+                    var custom = ScriptableObject.CreateInstance<StoryMappingItem>();
+                    custom.name = custom.Value = mood;
+                    Traverse.Create(item).Field("_mapping").SetValue(custom);
+                    var extra = new List<StoryCharaterImageItem>(data.PortraitResourceList) { item };
+                    Traverse.Create(data).Field("_portraitResourceList").SetValue(extra.ToArray());
+                }
                 Traverse.Create(item).Field("_addressKey").SetValue($"Portraits/{file.Key}{Path.GetExtension(file.Value)}");
             }
         }
