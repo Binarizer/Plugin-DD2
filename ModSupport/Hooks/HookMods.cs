@@ -4,12 +4,14 @@ using Fungus;
 using HarmonyLib;
 using Ideafixxxer.CsvParser;
 using MoonSharp.Interpreter;
+using Mortal.Combat;
 using Mortal.Core;
 using Mortal.Story;
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace Mortal
@@ -321,6 +323,73 @@ namespace Mortal
         }
 
         /// <summary>
+        /// 战斗UI头像替换
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(CombatCharacterStatusUI), "OnPanelOpen")]
+        public static bool CombatPortrait_Replace(ref CombatCharacterStatusUI __instance)
+        {
+            var t = Traverse.Create(__instance);
+            string addressKey = t.Property("Stat").Property("Data").Field("AvatarAddressKey").GetValue<string>();
+            var sprite = t.Field("_avatar").Property("sprite").GetValue<Sprite>();
+            if (sprite != null && sprite.name == addressKey)
+                return true;
+
+            foreach (var modDir in ModPaths)
+            {
+                var path = Path.Combine(modDir, addressKey);
+                if (File.Exists(path))
+                {
+                    sprite = LoadSprite(path, addressKey);
+                    if (sprite == null)
+                        continue;
+                    sprite.name = addressKey;
+                    t.Field("_avatar").Property("sprite").SetValue(sprite);
+                    return true;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 剧情UI头像替换
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterController), "LoadPortrait", new Type[] { typeof(string) })]
+        public static bool StoryPortraits_Replace(StoryCharacterController __instance, string key)
+        {
+            var t = Traverse.Create(__instance);
+            var _dicPortrait = t.Field("_dicPortrait").GetValue<Dictionary<string, string>>();
+            if (_dicPortrait.ContainsKey(key))
+                return true;
+            StoryCharaterImageItem storyCharaterImageItem = __instance.Data.PortraitResourceList.FirstOrDefault((StoryCharaterImageItem x) => x.Mapping.Value == key);
+            if (storyCharaterImageItem == null)
+                return true;
+            foreach(var modDir in ModPaths)
+            {
+                var path = Path.Combine(modDir, storyCharaterImageItem.AddressKey);
+                if (File.Exists(path))
+                {
+                    Sprite sprite = LoadSprite(path, storyCharaterImageItem.AddressKey);
+                    if (sprite == null)
+                        continue;
+                    sprite.name = storyCharaterImageItem.AddressKey;
+                    if (!__instance.Portraits.Exists((Sprite x) => x.name == sprite.name))
+                    {
+                        __instance.Portraits.Add(sprite);
+                        if (__instance.State.holder != null)
+                        {
+                            t.Method("AddPortraitObject", sprite).GetValue();
+                        }
+                    }
+                    if (!_dicPortrait.ContainsKey(key))
+                    {
+                        _dicPortrait.Add(key, sprite.name);
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
         /// 重定向等价Condition脚本
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(CheckPointManager), "Condition")]
@@ -446,13 +515,13 @@ namespace Mortal
             }
         }
         
-        public static Sprite LoadSprite(string filePath, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
+        public static Sprite LoadSprite(string filePath, string specificName = null, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
         {
             if (cacheSprite.ContainsKey(filePath))
                 return cacheSprite[filePath];
             if (!File.Exists(filePath))
                 return null;
-            var name = Path.GetFileNameWithoutExtension(filePath);
+            var name = string.IsNullOrEmpty(specificName) ? Path.GetFileNameWithoutExtension(filePath) : specificName;
             if (mapGif.TryGetValue(name, out Gif gifFound))
             {
                 gifFound.Reset();
@@ -489,7 +558,7 @@ namespace Mortal
                         tex2D = img.CreateTexture();
                         tex2D.name = name;
                         Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
-                        sprite.name = name;
+                        sprite.name = tex2D.name;
                         gif.frames.Add(sprite);
                         gif.delay.Add(img.Delay * 0.001f);
                         img = decoder.NextImage();

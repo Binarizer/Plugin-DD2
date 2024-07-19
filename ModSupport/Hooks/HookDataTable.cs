@@ -109,9 +109,7 @@ namespace Mortal
                 var matches = combatStats.Where(x => x.Name == param[0]);
                 foreach (var match in matches)
                 {
-                    var sprite = HookMods.LoadSprite(file.Value);
-                    if (sprite != null)
-                        match.StatusAvatar = sprite;
+                    match.AvatarAddressKey = $"Portraits/{file.Key}{Path.GetExtension(file.Value)}";
                 }
             }
         }
@@ -134,13 +132,10 @@ namespace Mortal
                 var data = datas.FirstOrDefault(x => Traverse.Create(x).Field("_mapping").GetValue<StoryMappingItem>() == mapping);
                 if (data == null)
                     continue;
-                var t = Traverse.Create(data);
-                var field = t.Fields().FirstOrDefault(x => x.ToLower() == param[1].ToLower());
-                if (field == null)
+                var item = data.PortraitResourceList.FirstOrDefault(x => x.Mapping.Value == param[1].ToLower());
+                if (item == null)
                     continue;
-                var sprite = HookMods.LoadSprite(file.Value);
-                if (sprite != null)
-                    t.Field(field).SetValue(sprite);
+                Traverse.Create(item).Field("_addressKey").SetValue($"Portraits/{file.Key}{Path.GetExtension(file.Value)}");
             }
         }
 

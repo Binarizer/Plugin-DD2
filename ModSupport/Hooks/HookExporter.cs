@@ -8,7 +8,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
-using OBB.Framework.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -72,7 +71,7 @@ namespace Mortal
                 if (Input.GetKeyDown(KeyCode.F5) && exportImage.Value)
                 {
                     Debug.Log("F5 is pressed");
-                    ExportPortraits();
+                    //ExportPortraits();
                 }
 
                 // 导出数据表
@@ -94,27 +93,6 @@ namespace Mortal
             }
             File.WriteAllText(exportPath, sb.ToString());
         }
-        static bool exportingPortaits = false;
-        static string exportPortraitDir = null;
-        public static void ExportPortraits()
-        {
-            exportingPortaits = true;
-            exportPortraitDir = Path.Combine(exportDir.Value, "Portraits");
-            if (!Directory.Exists(exportPortraitDir))
-                Directory.CreateDirectory(exportPortraitDir);
-            var characterConfig = Traverse.Create(CharacterPlaceholder.Instance).Field("_config").GetValue<StoryCharacterConfig>();
-            foreach(var characterData in characterConfig.List)
-            {
-                Debug.Log($"Export {characterData.Id}");
-                if (characterData.DefaultPortrait)
-                {
-                    string defaultFileName = $"{characterData.Id}.png";
-                    ExportSprite(defaultFileName, characterData.DefaultPortrait);
-                }
-                characterData.GetPortraitList();
-            }
-            exportingPortaits = false;
-        }
 
         static Texture2D MakeReadable(Texture2D source)
         {
@@ -134,25 +112,6 @@ namespace Mortal
             RenderTexture.active = previous;
             RenderTexture.ReleaseTemporary(renderTex);
             return readableText;
-        }
-
-        /// <summary>
-        /// 导出头像
-        /// </summary>
-        [HarmonyPostfix, HarmonyPatch(typeof(StoryCharacterData), "GetPortraitSprite", new Type[] { typeof(PortraitType) })]
-        public static void GetPortraitSprite_Export(ref StoryCharacterData __instance, ref Sprite __result, PortraitType type)
-        {
-            if (!exportEnable.Value || !exportingPortaits)
-                return;
-
-            string portraitTypeName = type.GetStringValue();
-            string portraitFileName = $"{__instance.Id}_{portraitTypeName}.png";
-            string exportPath = Path.Combine(exportPortraitDir, portraitFileName);
-            Debug.Log($"ModSupport: GetPortraitSprite {portraitFileName}");
-            if (__result != null)
-            {
-                ExportSprite(exportPath, __result);
-            }
         }
 
         public static void ExportSprite(string path, Sprite sprite)
