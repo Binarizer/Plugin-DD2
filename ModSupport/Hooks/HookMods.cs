@@ -4,15 +4,15 @@ using Fungus;
 using HarmonyLib;
 using Ideafixxxer.CsvParser;
 using MoonSharp.Interpreter;
-using Mortal.Combat;
 using Mortal.Core;
 using Mortal.Story;
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace Mortal
 {
@@ -29,7 +29,6 @@ namespace Mortal
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
         readonly static Dictionary<string, string> mapStory = new Dictionary<string, string>();
-        readonly static Dictionary<string, string> mapPicture = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapCondition = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapSwitch = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapPosition = new Dictionary<string, string>();
@@ -44,7 +43,7 @@ namespace Mortal
         static void AddFile(Dictionary<string, string> dict, string file)
         {
             var key = Path.GetFileNameWithoutExtension(file);
-            if (!dict.ContainsKey(file))
+            if (!dict.ContainsKey(key))
             {
                 Debug.Log($"ModSupport: Add file {file}");
                 dict.Add(key, file);
@@ -152,16 +151,6 @@ namespace Mortal
                     }
                 }
 
-                // 外部读取故事图
-                string pictureDir = Path.Combine(modPath, "Picture");
-                if (Directory.Exists(pictureDir))
-                {
-                    foreach (string file in Directory.EnumerateFiles(pictureDir, "*.png", SearchOption.AllDirectories))
-                    {
-                        AddFile(mapPicture, file);
-                    }
-                }
-
                 // 外部读取配音
                 string voiceDir = Path.Combine(modPath, "Voice");
                 if (Directory.Exists(voiceDir))
@@ -171,6 +160,37 @@ namespace Mortal
                         AddFile(mapVoice, file);
                     }
                 }
+            }
+
+            Harmony.CreateAndPatchAll(typeof(AddressableSpriteFromFile));
+        }
+
+        /// <summary>
+        /// 勾住Addressable的动态加载函数，直接从磁盘读取
+        /// </summary>
+        [HarmonyPatch]
+        class AddressableSpriteFromFile
+        {
+            static System.Reflection.MethodBase TargetMethod()
+            {
+                return typeof(Addressables).GetMethod("LoadAssetAsync", new Type[] { typeof(object) }).MakeGenericMethod(typeof(Sprite));
+            }
+            static bool Prefix(object key, ref AsyncOperationHandle<Sprite> __result)
+            {
+                string addressKey = key.ToString();
+                if (addressKey.StartsWith("pic_"))
+                    addressKey = "Picture/" + addressKey + ".png";
+                foreach (var modDir in ModPaths)
+                {
+                    var path = Path.Combine(modDir, addressKey);
+                    Sprite sprite = LoadSprite(path, addressKey);
+                    if (sprite == null)
+                        continue;
+                    Debug.Log($"Addressable from file: {path}");
+                    __result = Addressables.ResourceManager.CreateCompletedOperation(sprite, null);
+                    return false;
+                }
+                return true;
             }
         }
 
@@ -313,80 +333,13 @@ namespace Mortal
                 return true;
             }
 
-            Debug.Log($"ModSupport: Find external lua file {textName}");
+            Debug.Log($"ModSupport: run external story lua {textName}");
             var luaEnv = Traverse.Create(__instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string friendlyName = textName + ".LuaScript";
             string text = File.ReadAllText(mapStory[textName]);
             Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
             luaEnv.RunLuaFunction(fn, true, null);
             return false;
-        }
-
-        /// <summary>
-        /// 战斗UI头像替换
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(CombatCharacterStatusUI), "OnPanelOpen")]
-        public static bool CombatPortrait_Replace(ref CombatCharacterStatusUI __instance)
-        {
-            var t = Traverse.Create(__instance);
-            string addressKey = t.Property("Stat").Property("Data").Field("AvatarAddressKey").GetValue<string>();
-            var sprite = t.Field("_avatar").Property("sprite").GetValue<Sprite>();
-            if (sprite != null && sprite.name == addressKey)
-                return true;
-
-            foreach (var modDir in ModPaths)
-            {
-                var path = Path.Combine(modDir, addressKey);
-                if (File.Exists(path))
-                {
-                    sprite = LoadSprite(path, addressKey);
-                    if (sprite == null)
-                        continue;
-                    sprite.name = addressKey;
-                    t.Field("_avatar").Property("sprite").SetValue(sprite);
-                    return true;
-                }
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// 剧情UI头像替换
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(StoryCharacterController), "LoadPortrait", new Type[] { typeof(string) })]
-        public static bool StoryPortraits_Replace(StoryCharacterController __instance, string key)
-        {
-            var t = Traverse.Create(__instance);
-            var _dicPortrait = t.Field("_dicPortrait").GetValue<Dictionary<string, string>>();
-            if (_dicPortrait.ContainsKey(key))
-                return true;
-            StoryCharaterImageItem storyCharaterImageItem = __instance.Data.PortraitResourceList.FirstOrDefault((StoryCharaterImageItem x) => x.Mapping.Value == key);
-            if (storyCharaterImageItem == null)
-                return true;
-            foreach(var modDir in ModPaths)
-            {
-                var path = Path.Combine(modDir, storyCharaterImageItem.AddressKey);
-                if (File.Exists(path))
-                {
-                    Sprite sprite = LoadSprite(path, storyCharaterImageItem.AddressKey);
-                    if (sprite == null)
-                        continue;
-                    sprite.name = storyCharaterImageItem.AddressKey;
-                    if (!__instance.Portraits.Exists((Sprite x) => x.name == sprite.name))
-                    {
-                        __instance.Portraits.Add(sprite);
-                        if (__instance.State.holder != null)
-                        {
-                            t.Method("AddPortraitObject", sprite).GetValue();
-                        }
-                    }
-                    if (!_dicPortrait.ContainsKey(key))
-                    {
-                        _dicPortrait.Add(key, sprite.name);
-                    }
-                }
-            }
-            return true;
         }
 
         /// <summary>
@@ -400,9 +353,7 @@ namespace Mortal
                 return true;
             }
 
-            Debug.Log($"ModSupport: Find external Condition lua {name}");
             string script = File.ReadAllText(mapCondition[name]);
-            Debug.Log($"Lua={script}");
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             bool result = false;
             luaEnv.DoLuaString(script, "tmp.Condition", false, delegate (DynValue res)
@@ -410,7 +361,7 @@ namespace Mortal
                 result = res.Boolean;
             });
             __result = result;
-            Debug.Log($"Result={__result}");
+            Debug.Log($"ModSupport: run external Condition lua {name}, result={__result}");
             return false;
         }
 
@@ -425,7 +376,6 @@ namespace Mortal
                 return true;
             }
 
-            Debug.Log($"ModSupport: Find external Switch lua {name}");
             string script = File.ReadAllText(mapSwitch[name]);
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             int result = 0;
@@ -434,6 +384,7 @@ namespace Mortal
                 result = (int)res.Number;
             });
             __result = result;
+            Debug.Log($"ModSupport: run external Switch lua {name}, result={__result}");
             return false;
         }
 
@@ -446,7 +397,6 @@ namespace Mortal
             if (!mapPosition.ContainsKey(name))
                 return true;
 
-            Debug.Log($"ModSupport: Find external Position lua {name}");
             string script = File.ReadAllText(mapPosition[name]);
             var luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
             string result = "";
@@ -455,6 +405,7 @@ namespace Mortal
                 result = res.String;
             });
             __result = result;
+            Debug.Log($"ModSupport: run external Position lua {name}, result={__result}");
             return false;
         }
 
@@ -568,25 +519,6 @@ namespace Mortal
                 }
             }
             return null;
-        }
-
-        /// <summary>
-        /// 重定向故事图
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(StoryPicture), "Show", new Type[] { typeof(string) })]
-        public static bool StoryPictureShowPrefix(ref StoryPicture __instance, ref string key)
-        {
-            var fullKey = "pic_" + key;
-            if (!mapPicture.TryGetValue(fullKey, out string path))
-                return true;
-            var sprite = HookMods.LoadSprite(path);
-            if (sprite == null)
-                return true;
-
-            Debug.Log($"ModSupport: Find external picture {key}");
-            Traverse.Create(__instance).Field("_defaultSprite").SetValue(sprite);
-            key = "";
-            return true;
         }
     }
 }

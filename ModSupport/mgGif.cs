@@ -41,13 +41,6 @@ namespace MG.GIF
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp
             };
-
-            //var copyRaw = new Color32[RawImage.Length];
-            //for ( int i = 0; i < RawImage.Length; i++ )
-            //{
-            //    var c = RawImage[i];
-            //    copyRaw[i] = new Color32(c.r, c.g, c.b, 127);
-            //}
             tex.SetPixels32(RawImage);
             tex.Apply();
 

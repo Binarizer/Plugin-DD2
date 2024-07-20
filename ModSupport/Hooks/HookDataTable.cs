@@ -463,6 +463,8 @@ namespace Mortal
             typeof(StoryCharacterData),
             typeof(SpriteCollectionData),
             typeof(SpriteData),
+            typeof(AddressableCollectionData),
+            typeof(AddressableData),
         };
     }
 }
