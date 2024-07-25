@@ -28,7 +28,6 @@ namespace Mortal
         }
 
         readonly static string ModRootPath = Path.Combine(Environment.CurrentDirectory, "Mods");
-        readonly static Dictionary<string, string> mapStory = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapCondition = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapSwitch = new Dictionary<string, string>();
         readonly static Dictionary<string, string> mapPosition = new Dictionary<string, string>();
@@ -92,16 +91,6 @@ namespace Mortal
 
                 Debug.Log($"ModSupport: Scan mod path {modPath}");
                 ModPaths.Add(modPath);
-
-                // 外部读取lua剧本
-                string storyPath = Path.Combine(modPath, "story");
-                if (Directory.Exists(storyPath))
-                {
-                    foreach (string file in Directory.EnumerateFiles(storyPath, "*.lua", SearchOption.AllDirectories))
-                    {
-                        AddFile(mapStory, file);
-                    }
-                }
 
                 // 外部读取等价lua条件判定
                 string conditionPath = Path.Combine(modPath, "LuaEquivalent/Condition");
@@ -318,28 +307,6 @@ namespace Mortal
             {
                 __result = $"ac<{key}>{__result}";
             }
-        }
-
-        /// <summary>
-        /// 重定向剧本Lua文件
-        /// </summary>
-        [HarmonyPrefix, HarmonyPatch(typeof(LuaManager), "ExecuteLuaScript")]
-        public static bool LuaScriptRedirect(ref LuaManager __instance)
-        {
-            Traverse.Create(__instance);
-            string textName = __instance.ScriptName;
-            if (!mapStory.ContainsKey(textName))
-            {
-                return true;
-            }
-
-            Debug.Log($"ModSupport: run external story lua {textName}");
-            var luaEnv = Traverse.Create(__instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
-            string friendlyName = textName + ".LuaScript";
-            string text = File.ReadAllText(mapStory[textName]);
-            Closure fn = luaEnv.LoadLuaFunction(text, friendlyName);
-            luaEnv.RunLuaFunction(fn, true, null);
-            return false;
         }
 
         /// <summary>

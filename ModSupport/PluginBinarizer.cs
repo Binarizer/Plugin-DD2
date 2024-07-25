@@ -28,6 +28,7 @@ namespace Mortal
             RegisterHook(new HookMods());
             RegisterHook(new HookExporter());
             RegisterHook(new HookDataTable());
+            RegisterHook(new HookCustomStory());
         }   
 
         void Start()

@@ -192,7 +192,6 @@ namespace Mortal
                     {
                         if (!type.IsAbstract && !type.IsGenericType && typeof(ScriptableObject).IsAssignableFrom(type))
                         {
-                            Debug.Log($"Find ScriptableObject type = {type.Name}");
                             _so_types.Add(type);
                         }
                     }

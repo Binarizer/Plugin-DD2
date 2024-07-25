@@ -37,6 +37,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Hooks\HookDataTable.cs" />
+    <Compile Include="Hooks\HookCustomStory.cs" />
     <Compile Include="Hooks\HookMods.cs" />
     <Compile Include="Hooks\IHook.cs" />
     <Compile Include="Hooks\HookExporter.cs" />
