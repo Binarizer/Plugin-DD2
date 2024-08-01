@@ -244,13 +244,13 @@ namespace Mortal
             {
                 var soArray = Resources.FindObjectsOfTypeAll(so_type);
                 Debug.Log($"Find so_type {so_type.Name}, count = {soArray.Length}");
-                if (soArray.Length > 0) // 一个以上的才可谓“表”
+                if (soArray.Length > 0)
                 {
-                    var dir = Path.Combine(exportPath, so_type.Name);
+                    var dir = Path.Combine(exportPath, GetSoTypeDir(so_type));
                     foreach (var item in soArray)
                     {
                         ScriptableObject so = item as ScriptableObject;
-                        if (so != null && !(so is CombatStateEffectUnitScriptable))
+                        if (so != null)
                         {
                             if (!Directory.Exists(dir))
                             {
@@ -261,6 +261,11 @@ namespace Mortal
                     }
                 }
             }
+        }
+
+        static string GetSoTypeDir(Type so_type)
+        {
+            return typeof(CombatStateEffectUnitScriptable).IsAssignableFrom(so_type) ? "CombatStateEffectUnitScriptable" : so_type.Name;
         }
 
         static JToken ToJson(ScriptableObject obj, JsonSerializer serializer)
@@ -351,7 +356,7 @@ namespace Mortal
                 Debug.Log($"ParseSo: Add New {soType.Name}/{soName}");
                 isDefault = true;
             }
-            string modFilePath = HookMods.FindModFile($"DataTable/{soType.Name}/{soName}.json");
+            string modFilePath = HookMods.FindModFile($"DataTable/{GetSoTypeDir(soType)}/{soName}.json");
             if (!string.IsNullOrEmpty(modFilePath) && !FileProcessed.Contains(modFilePath))
             {
                 FileProcessed.Add(modFilePath);
@@ -361,7 +366,7 @@ namespace Mortal
             }
             if (isDefault)
             {
-                Debug.LogWarning($"RecursiveParseSo: {soType.Name}/{soName}.json not found, use default values!");
+                Debug.LogWarning($"RecursiveParseSo: {GetSoTypeDir(soType)}/{soName}.json not found, use default values!");
             }
             return o as ScriptableObject;
         }
