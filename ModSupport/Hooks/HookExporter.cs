@@ -1,5 +1,6 @@
 ﻿using BepInEx.Configuration;
 using BepInEx.Unity.Mono;
+using DG.Tweening;
 using HarmonyLib;
 using Lean.Localization;
 using Mortal.Core;
@@ -47,6 +48,7 @@ namespace Mortal
             exSerializer.Converters.Add(new ScriptableObjectConverter());
             exSerializer.Converters.Add(new StatValueReferenceConverter());
             exSerializer.Converters.Add(new SpriteConverter());
+            exSerializer.Converters.Add(new CurveConverter());
         }
 
         public void OnUpdate()
@@ -378,6 +380,52 @@ namespace Mortal
                     Debug.Log($"ModSupport: Export Sprite {spriteName}");
                     ExportSprite(spriteName, sprite);
                 }
+            }
+        }
+        /// <summary>
+        /// Curve特殊处理
+        /// </summary>
+        public class CurveConverter : JsonConverter
+        {
+            public override bool CanConvert(Type objectType)
+            {
+                return typeof(AnimationCurve) == objectType;
+            }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                List<Keyframe> keyList = new List<Keyframe>();
+                JArray jArray = JArray.Load(reader);
+                foreach (var token in jArray)
+                {
+                    JObject jobj = token as JObject;
+                    object boxed = new Keyframe();
+                    foreach (var prop in jobj)
+                    {
+                        var pi = typeof(Keyframe).GetProperty(prop.Key);
+                        pi?.SetValue(boxed, prop.Value.ToObject(pi.PropertyType, serializer));
+                    }
+                    keyList.Add((Keyframe)boxed);
+                }
+                return new AnimationCurve(keyList.ToArray());
+            }
+
+            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            {
+                AnimationCurve curve = (AnimationCurve)value;
+                if (curve == null)
+                    return;
+
+                JArray jArray = new JArray();
+                foreach (var keyframe in curve.keys)
+                {
+                    JObject jobj = new JObject();
+                    foreach (var pi in typeof(Keyframe).GetProperties())
+                        jobj.Add(pi.Name, JToken.FromObject(pi.GetValue(keyframe), serializer));
+
+                    jArray.Add(jobj);
+                }
+                jArray.WriteTo(writer);
             }
         }
     }
