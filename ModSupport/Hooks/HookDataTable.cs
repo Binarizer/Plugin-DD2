@@ -424,6 +424,7 @@ namespace Mortal
             typeof(SpecialItem),
             typeof(StoryMappingItem),
             typeof(StringGameEvent),
+            typeof(SubMissionsData),
             typeof(UpgradeItemCollectionData),
             typeof(UpgradeItemData),
             typeof(UpgradeItemStatConvertData),
