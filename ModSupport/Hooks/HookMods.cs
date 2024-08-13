@@ -10,6 +10,7 @@ using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -20,6 +21,8 @@ namespace Mortal
     public class HookMods : IHook
     {
         private static ConfigEntry<string> modName;
+        private static ConfigEntry<KeyCode> modKey;
+        private static ConfigEntry<KeyCode> consoleKey;
         private static ConfigEntry<bool> gifEnable;
 
         public IEnumerable<Type> GetRegisterTypes()
@@ -48,7 +51,7 @@ namespace Mortal
                 dict.Add(key, file);
             }
         }
-
+        static string originalModValue = null;
         public static List<string> ModPaths = new List<string>();
 
         /// <summary>
@@ -67,9 +70,15 @@ namespace Mortal
             return null;
         }
 
-        public void OnRegister(BaseUnityPlugin plugin)
+        public void OnRegister(PluginBinarizer plugin)
         {
+            plugin.onUpdate += OnUpdate;
+            plugin.onGui += OnGui;
+
             modName = plugin.Config.Bind("Mod Support", "Mod Name", "test", "Mod Name");
+            originalModValue = modName.Value;
+            modKey = plugin.Config.Bind("Mod Support", "Mod Key", KeyCode.F1, "Open mod list window");
+            consoleKey = plugin.Config.Bind("Mod Support", "Console Key", KeyCode.F2, "Open console window");
             gifEnable = plugin.Config.Bind("Mod Support", "Gif Enable", true, "Enable import gif");
             luaExt = plugin.gameObject.AddComponent<LuaExt>();
 
@@ -199,13 +208,90 @@ namespace Mortal
             return csvLines.Length;
         }
 
+        bool modListOn = false;
+        Rect modListRect = new Rect(100, 100, 400, 300);
+        Vector2 modScrollPosition;
+        bool consoleOn = true;
+        LuaEnvironment luaEnv = null;
+        Rect consoleRect = new Rect(10, Screen.height - 100, 500, 80);
+        string luaCmd = "";
+        string luaRet = "";
         public void OnUpdate()
         {
+            if (Input.GetKeyDown(modKey.Value))
+            {
+                modListOn = !modListOn;
+            }
+            if (Input.GetKeyDown(consoleKey.Value))
+            {
+                consoleOn = !consoleOn;
+            }
             if (gifEnable.Value && mapGif.Count > 0)
             {
                 GifUpdate(typeof(UnityEngine.UI.Image));
                 GifUpdate(typeof(SpriteRenderer));
             }
+        }
+
+        public void OnGui()
+        {
+            modListOn = modListOn && versionText != null;
+            if (modListOn)
+            {
+                modListRect = GUI.Window(857204, modListRect, new GUI.WindowFunction(DoWindowMod), "mod list");
+            }
+
+            luaEnv = Traverse.Create(LuaManager.Instance).Field("_luaEnvironment").GetValue<LuaEnvironment>();
+            consoleOn = consoleOn && luaEnv != null;
+            if (consoleOn)
+            {
+                consoleRect = GUI.Window(857205, consoleRect, new GUI.WindowFunction(DoWindowLua), "lua console");
+            }
+        }
+
+        /// <summary>
+        /// Draw Mod List Window
+        /// </summary>
+        public void DoWindowMod(int windowID)
+        {
+            var modDirs = Directory.GetDirectories(ModRootPath);
+            var modOn = new bool[modDirs.Length];
+            var mods = modName.Value.Trim().Split(',');
+            var modifiedMods = new List<string>();
+            modScrollPosition = GUILayout.BeginScrollView(modScrollPosition, GUILayout.Width(380), GUILayout.Height(270));
+            for (int i = 0; i < modDirs.Length; ++i)
+            {
+                var dirName = Path.GetFileName(modDirs[i]);
+                modOn[i] = mods.Contains(dirName);
+                if (GUILayout.Toggle(modOn[i], dirName))
+                    modifiedMods.Add(dirName);
+            }
+            modName.Value = string.Join(",", modifiedMods);
+            var needRestart = modName.Value != originalModValue ? "(need restart)" : "";
+            versionText.text = $"{Application.version}, mods: {modName.Value}{needRestart}";
+            GUILayout.EndScrollView();
+            GUI.DragWindow();
+        }
+
+        /// <summary>
+        /// Draw Lua Console Window
+        /// </summary>
+        public void DoWindowLua(int windowID)
+        {
+            GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal();
+            luaCmd = GUILayout.TextField(luaCmd, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("run", GUILayout.Width(60)))
+            {
+                luaEnv?.DoLuaString(luaCmd, "Console.cmd", false, delegate (DynValue res)
+                {
+                    luaRet = res.ToString();
+                });
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.Label($"Return = {luaRet}");
+            GUILayout.EndVertical();
+            GUI.DragWindow();
         }
 
         static void GifUpdate(Type t)
@@ -224,6 +310,7 @@ namespace Mortal
             }
         }
 
+        static UnityEngine.UI.Text versionText = null;
         /// <summary>
         /// 修改显示的mod名
         /// </summary>
@@ -232,7 +319,8 @@ namespace Mortal
         {
             if (string.IsNullOrEmpty(modName.Value))
                 return true;
-            __instance.GetComponent<UnityEngine.UI.Text>().text = $"{Application.version}, mods: {modName.Value}";
+            versionText = __instance.GetComponent<UnityEngine.UI.Text>();
+            versionText.text = $"{Application.version}, mods: {modName.Value}";
             var rt = __instance.GetComponent<RectTransform>();
             rt.offsetMax = new Vector2(2000, rt.offsetMax.y);
             rt.sizeDelta = new Vector2(2000, rt.sizeDelta.y);

@@ -31,8 +31,10 @@ namespace Mortal
 
         public static JsonSerializer exSerializer = null;
 
-        public void OnRegister(BaseUnityPlugin plugin)
+        public void OnRegister(PluginBinarizer plugin)
         {
+            plugin.onUpdate += OnUpdate;
+
             exportEnable = plugin.Config.Bind("Export", "Enable Export", false, "Enable Export");
             exportDir = plugin.Config.Bind("Export", "Export Dir", "./", "Export Dir");
             exportImage = plugin.Config.Bind("Export", "Export PNG", false, "Export PNG");

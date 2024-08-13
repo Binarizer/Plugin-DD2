@@ -22,7 +22,7 @@ namespace Mortal
             return new Type[] { GetType() };
         }
 
-        public void OnRegister(BaseUnityPlugin plugin)
+        public void OnRegister(PluginBinarizer plugin)
         {
             CsvParser parser = new CsvParser();
             foreach (var modPath in HookMods.ModPaths)
@@ -59,10 +59,6 @@ namespace Mortal
                     Debug.Log($"HookCustomStory: Add {csvLines.Length} lines to CustomStory.");
                 }
             }
-        }
-
-        public void OnUpdate()
-        {
         }
 
         public readonly static Dictionary<string, string> mapStory = new Dictionary<string, string>();

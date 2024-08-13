@@ -28,13 +28,9 @@ namespace Mortal
             return new Type[] { GetType() };
         }
 
-        public void OnRegister(BaseUnityPlugin plugin)
+        public void OnRegister(PluginBinarizer plugin)
         {
             SceneManager.sceneLoaded += InjectSoMods;
-        }
-
-        public void OnUpdate()
-        {
         }
 
         public readonly static Dictionary<string, string> mapPortrait = new Dictionary<string, string>();
