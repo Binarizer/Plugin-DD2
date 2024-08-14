@@ -1,5 +1,4 @@
-﻿using BepInEx.Unity.Mono;
-using HarmonyLib;
+﻿using HarmonyLib;
 using Mortal.Battle;
 using Mortal.Combat;
 using Mortal.Core;
@@ -401,6 +400,7 @@ namespace Mortal
             typeof(FacilityAdditionData),
             typeof(FacilityItemData),
             typeof(FacilityLevelData),
+            typeof(FlagCollectionData),
             typeof(FlagData),
             typeof(GameStat),
             typeof(ItemDataCollection),
