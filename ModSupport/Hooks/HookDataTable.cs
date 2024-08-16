@@ -10,6 +10,7 @@ using OBB.Framework.Data;
 using OBB.Framework.Extensions;
 using OBB.Framework.ScriptableEvent;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -376,12 +377,25 @@ namespace Mortal
             foreach (var field in jobj.Properties())
             {
                 var tField = t.Field(field.Name);
-                if (tField == null)
+                if (tField != null)
                 {
-                    Debug.Log($"Warning: {t.GetValueType().Name} cannot find field {field.Name}, skip!");
+                    tField.SetValue(field.Value.ToObject(tField.GetValueType(), HookExporter.exSerializer));
                     continue;
                 }
-                tField.SetValue(field.Value.ToObject(tField.GetValueType(), HookExporter.exSerializer));
+                
+                // 看看是不是CollectionData，处理add
+                if (typeof(CollectionData<>).IsAssignableFrom(obj.GetType()) && field.Name == "_add")
+                {
+                    JArray jarr = field.Value as JArray;
+                    var list = t.Field("_list").GetValue();
+                    foreach(var jtoken in jarr)
+                    {
+                        (list as IList).Add(jtoken.ToObject(list.GetType().GetGenericArguments()[0], HookExporter.exSerializer));
+                    }
+                    continue;
+                }
+
+                Debug.Log($"Warning: {t.GetValueType().Name} cannot find field {field.Name}, skip!");
             }
         }
 

@@ -104,8 +104,8 @@ namespace Mortal
 
             var t = Traverse.Create(loadPanel);
             var panelSlots = t.Field("_saveSlots").GetValue<LoadSlotPanel[]>();
-            scrollContent = panelSlots[0].transform.parent.parent;
-            var prefab = panelSlots[0].transform.parent.gameObject;
+            scrollContent = panelSlots[0].transform.parent;
+            var prefab = panelSlots[0].gameObject;
             var btnPrefab = prefab.transform.Find("Delete").gameObject;
             var btnSwitch = GameObject.Instantiate(btnPrefab, manualObj.transform.parent);
             btnSwitch.GetComponent<RectTransform>().anchoredPosition = new Vector2(1260, -250);
@@ -125,7 +125,7 @@ namespace Mortal
 
             foreach (var slot in panelSlots)
             {
-                saveSlots.Add(slot.transform.parent.gameObject);
+                saveSlots.Add(slot.gameObject);
             }
 
             foreach( var entry in mapStoryEntry.Values )
@@ -209,7 +209,7 @@ namespace Mortal
             Traverse t = Traverse.Create(slotPanel);
             t.Field("_slot").SetValue(entry.lua);
             t.Field("_slotText").Property("text").SetValue("故事" + entry.lua);
-            t.Field("_deleteButton").GetValue<GameObject>().SetActive(false);
+            t.Field("_deleteButton").GetValue<Button>().gameObject.SetActive(false);
             t.Field("_newGamePlusIcon").GetValue<GameObject>().SetActive(false);
             t.Field("_focusObj").GetValue<GameObject>().SetActive(true);
             Text[] array = t.Field("_titleText").GetValue<Text[]>();
