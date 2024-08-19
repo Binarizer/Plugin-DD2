@@ -377,14 +377,14 @@ namespace Mortal
             foreach (var field in jobj.Properties())
             {
                 var tField = t.Field(field.Name);
-                if (tField != null)
+                if (tField.FieldExists())
                 {
                     tField.SetValue(field.Value.ToObject(tField.GetValueType(), HookExporter.exSerializer));
                     continue;
                 }
-                
+
                 // 看看是不是CollectionData，处理add
-                if (typeof(CollectionData<>).IsAssignableFrom(obj.GetType()) && field.Name == "_add")
+                if (IsGenericTypeOf(obj.GetType(), typeof(CollectionData<>)) && field.Name == "_add")
                 {
                     JArray jarr = field.Value as JArray;
                     var list = t.Field("_list").GetValue();
@@ -397,6 +397,17 @@ namespace Mortal
 
                 Debug.Log($"Warning: {t.GetValueType().Name} cannot find field {field.Name}, skip!");
             }
+        }
+
+        public static bool IsGenericTypeOf(Type type, Type genericType)
+        {
+            while (type != null && type != typeof(object))
+            {
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == genericType)
+                    return true;
+                type = type.BaseType;
+            }
+            return false;
         }
 
         public static bool InjectedTitle = false;

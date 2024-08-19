@@ -7,6 +7,7 @@ using MoonSharp.Interpreter;
 using Mortal.Core;
 using Mortal.Story;
 using NAudio.Wave;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -520,8 +521,18 @@ namespace Mortal
                 }
             }
         }
+
+        public class SpriteDesc
+        {
+            public Vector2 pivot = new Vector2(0, 0);
+            public float pixelsPerUnit = 100.0f;
+            public uint extrude = 0;
+            public SpriteMeshType spriteType = SpriteMeshType.Tight;
+
+            public static SpriteDesc _default = new SpriteDesc();
+        }
         
-        public static Sprite LoadSprite(string filePath, string specificName = null, float PixelsPerUnit = 100.0f, SpriteMeshType spriteType = SpriteMeshType.Tight)
+        public static Sprite LoadSprite(string filePath, string specificName = null)
         {
             if (cacheSprite.ContainsKey(filePath))
                 return cacheSprite[filePath];
@@ -534,13 +545,17 @@ namespace Mortal
                 return gifFound.Current;
             }
             var ext = Path.GetExtension(filePath).ToLower();
-            if (ext == ".png")
+            if (ext == ".png" || ext == ".jpg")
             {
                 byte[] data = File.ReadAllBytes(filePath);
                 Texture2D tex2D = new Texture2D(2, 2);
                 if (tex2D.LoadImage(data))
                 {
-                    Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                    var spriteJsonPath = filePath.Replace(ext, ".json");
+                    SpriteDesc desc = SpriteDesc._default;
+                    if (File.Exists(spriteJsonPath))
+                        desc = JsonConvert.DeserializeObject<SpriteDesc>(File.ReadAllText(spriteJsonPath));
+                    Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), desc.pivot, desc.pixelsPerUnit, desc.extrude, desc.spriteType);
                     sprite.name = name;
                     cacheSprite.Add(filePath, sprite);
                     return sprite;
@@ -563,7 +578,8 @@ namespace Mortal
                     {
                         tex2D = img.CreateTexture();
                         tex2D.name = name;
-                        Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), new Vector2(0, 0), PixelsPerUnit, 0, spriteType);
+                        SpriteDesc desc = SpriteDesc._default;
+                        Sprite sprite = Sprite.Create(tex2D, new Rect(0, 0, tex2D.width, tex2D.height), desc.pivot, desc.pixelsPerUnit, desc.extrude, desc.spriteType);
                         sprite.name = tex2D.name;
                         gif.frames.Add(sprite);
                         gif.delay.Add(img.Delay * 0.001f);
