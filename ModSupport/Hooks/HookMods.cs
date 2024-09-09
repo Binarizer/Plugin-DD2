@@ -165,35 +165,9 @@ namespace Mortal
             }
 
             if (aaEnable.Value)
-                Harmony.CreateAndPatchAll(typeof(AddressableSpriteFromFile));
-        }
-
-        /// <summary>
-        /// 勾住Addressable的动态加载函数，直接从磁盘读取
-        /// </summary>
-        [HarmonyPatch]
-        class AddressableSpriteFromFile
-        {
-            static System.Reflection.MethodBase TargetMethod()
             {
-                return typeof(Addressables).GetMethod("LoadAssetAsync", new Type[] { typeof(object) }).MakeGenericMethod(typeof(Sprite));
-            }
-            static bool Prefix(object key, ref object __result)
-            {
-                string addressKey = key.ToString();
-                if (addressKey.StartsWith("pic_"))
-                    addressKey = "Picture/" + addressKey + ".png";
-                foreach (var modDir in ModPaths)
-                {
-                    var path = Path.Combine(modDir, addressKey);
-                    Sprite sprite = LoadSprite(path, addressKey);
-                    if (sprite == null)
-                        continue;
-                    Debug.Log($"Addressable from file: {path}");
-                    __result = Addressables.ResourceManager.CreateCompletedOperation(sprite, null);
-                    return false;
-                }
-                return true;
+                Addressables.ModPaths = ModPaths.ToArray();
+                Addressables.LoadSprite = LoadSprite;
             }
         }
 
@@ -259,7 +233,7 @@ namespace Mortal
         /// </summary>
         public void DoWindowMod(int windowID)
         {
-            aaEnable.Value = GUILayout.Toggle(aaEnable.Value, "开启换图功能(战役时请关闭并重启游戏)");
+            aaEnable.Value = GUILayout.Toggle(aaEnable.Value, "开启换图功能");
 
             var modDirs = Directory.GetDirectories(ModRootPath);
             var modOn = new bool[modDirs.Length];
