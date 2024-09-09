@@ -92,7 +92,7 @@ namespace Mortal
             customSlots.Clear();
             isSavePanel = true;
 
-            manualObj = __instance.transform.Find("Manual").gameObject;
+            manualObj = __instance.transform.Find("Container").Find("Manual").gameObject;
             customObj = GameObject.Instantiate(manualObj, manualObj.transform.parent);
             var pos = customObj.GetComponent<RectTransform>().anchoredPosition;
             customObj.GetComponent<RectTransform>().anchoredPosition = new Vector2(pos.x + 400, pos.y);
@@ -108,7 +108,7 @@ namespace Mortal
             var prefab = panelSlots[0].gameObject;
             var btnPrefab = prefab.transform.Find("Delete").gameObject;
             var btnSwitch = GameObject.Instantiate(btnPrefab, manualObj.transform.parent);
-            btnSwitch.GetComponent<RectTransform>().anchoredPosition = new Vector2(1260, -250);
+            btnSwitch.GetComponent<RectTransform>().anchoredPosition = new Vector2(pos.x + 260, pos.y + 15);
             Component.Destroy(btnSwitch.GetComponent<MenuToggleButton>());
             var btnComp = btnSwitch.GetComponent<Button>();
             btnComp.onClick.RemoveAllListeners();

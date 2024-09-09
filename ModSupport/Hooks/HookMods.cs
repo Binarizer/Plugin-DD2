@@ -15,6 +15,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using static Mono.Security.X509.X520;
 
 namespace Mortal
 {
@@ -25,6 +26,7 @@ namespace Mortal
         private static ConfigEntry<KeyCode> modKey;
         private static ConfigEntry<KeyCode> consoleKey;
         private static ConfigEntry<bool> gifEnable;
+        private static ConfigEntry<bool> aaEnable;
 
         public IEnumerable<Type> GetRegisterTypes()
         {
@@ -81,6 +83,7 @@ namespace Mortal
             modKey = plugin.Config.Bind("Mod Support", "Mod Key", KeyCode.F1, "Open mod list window");
             consoleKey = plugin.Config.Bind("Mod Support", "Console Key", KeyCode.F2, "Open console window");
             gifEnable = plugin.Config.Bind("Mod Support", "Gif Enable", true, "Enable import gif");
+            aaEnable = plugin.Config.Bind("Mod Support", "Addressable Enable", true, "Enable addressable sprite replace");
             luaExt = plugin.gameObject.AddComponent<LuaExt>();
 
             if (string.IsNullOrEmpty(modName.Value))
@@ -161,7 +164,8 @@ namespace Mortal
                 }
             }
 
-            Harmony.CreateAndPatchAll(typeof(AddressableSpriteFromFile));
+            if (aaEnable.Value)
+                Harmony.CreateAndPatchAll(typeof(AddressableSpriteFromFile));
         }
 
         /// <summary>
@@ -174,7 +178,7 @@ namespace Mortal
             {
                 return typeof(Addressables).GetMethod("LoadAssetAsync", new Type[] { typeof(object) }).MakeGenericMethod(typeof(Sprite));
             }
-            static bool Prefix(object key, ref AsyncOperationHandle<Sprite> __result)
+            static bool Prefix(object key, ref object __result)
             {
                 string addressKey = key.ToString();
                 if (addressKey.StartsWith("pic_"))
@@ -210,7 +214,7 @@ namespace Mortal
         }
 
         bool modListOn = false;
-        Rect modListRect = new Rect(100, 100, 400, 300);
+        Rect modListRect = new Rect(100, 100, 400, 320);
         Vector2 modScrollPosition;
         bool consoleOn = true;
         LuaEnvironment luaEnv = null;
@@ -255,6 +259,8 @@ namespace Mortal
         /// </summary>
         public void DoWindowMod(int windowID)
         {
+            aaEnable.Value = GUILayout.Toggle(aaEnable.Value, "开启换图功能(战役时请关闭并重启游戏)");
+
             var modDirs = Directory.GetDirectories(ModRootPath);
             var modOn = new bool[modDirs.Length];
             var mods = modName.Value.Trim().Split(',');
