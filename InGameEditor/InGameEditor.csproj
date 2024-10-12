@@ -18,7 +18,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>N:\Millennia.Premium.Edition.v1.0.23\BepInEx\Plugins\</OutputPath>
+    <OutputPath>L:\Millennia.v1.0.22094.F-P2P\BepInEx\Plugins\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -27,7 +27,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>N:\Millennia.Premium.Edition.v1.0.23\BepInEx\Plugins\</OutputPath>
+    <OutputPath>L:\Millennia.v1.0.22094.F-P2P\BepInEx\Plugins\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -39,106 +39,106 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="0Harmony20">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\BepInEx\core\0Harmony20.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\BepInEx\core\0Harmony20.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AmplifyShaderEditor.Samples.BuiltIn">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\AmplifyShaderEditor.Samples.BuiltIn.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\AmplifyShaderEditor.Samples.BuiltIn.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Assembly-CSharp.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AWSSDK.Core">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\AWSSDK.Core.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\AWSSDK.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AWSSDK.S3">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\AWSSDK.S3.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\AWSSDK.S3.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="BepInEx">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\BepInEx\core\BepInEx.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\BepInEx\core\BepInEx.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="BepInEx.Harmony">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\BepInEx\core\BepInEx.Harmony.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\BepInEx\core\BepInEx.Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Ceras">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Ceras.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Ceras.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="ch.sycoforge.Decal">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\ch.sycoforge.Decal.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\ch.sycoforge.Decal.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="ch.sycoforge.Logging">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\ch.sycoforge.Logging.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\ch.sycoforge.Logging.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="ch.sycoforge.Unity.Runtime">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\ch.sycoforge.Unity.Runtime.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\ch.sycoforge.Unity.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Cinemachine">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Cinemachine.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Cinemachine.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="com.unity.multiplayer-hlapi.Runtime">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\com.unity.multiplayer-hlapi.Runtime.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\com.unity.multiplayer-hlapi.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DOTween">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\DOTween.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\DOTween.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="JBooth.MicroSplat.Core">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\JBooth.MicroSplat.Core.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\JBooth.MicroSplat.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=6.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Security">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\Mono.Security.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\Mono.Security.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.InputModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.InputModule.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.InputModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEngine.UIModule">
-      <HintPath>N:\Millennia.Premium.Edition.v1.0.23\Millennia_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+      <HintPath>L:\Millennia.v1.0.22094.F-P2P\Millennia_Data\Managed\UnityEngine.UIModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>

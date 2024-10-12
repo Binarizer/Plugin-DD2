@@ -60,7 +60,7 @@ namespace Millennia_IGE
             GUI.contentColor = Color.red;
             GUI.skin.button.fontSize = 16;
             GUI.DragWindow(new Rect(10f, 0f, 480f, 20f));
-            GUILayout.BeginArea(new Rect(10f, 20f, 480f, 380f));
+            GUILayout.BeginArea(new Rect(10f, 20f, 480f, 420f));
             currentGridIndex = GUILayout.Toolbar(currentGridIndex, gridText);
             switch (currentGridIndex)
             {
@@ -175,7 +175,7 @@ namespace Millennia_IGE
                         bool changed = GUI.changed;
                         if (changed)
                         {
-                            ADevConfig.EnableTechShiftClick = toggleTechShiftClick;
+                            //ADevConfig.EnableTechShiftClick = toggleTechShiftClick;
                             AUIManager.Instance.RefreshAllPanels(UIRefreshType.cUIRefreshAll);
                         }
                         break;
@@ -297,12 +297,26 @@ namespace Millennia_IGE
         }
 
         /// <summary>
+        /// 可Shift点科技
+        /// </summary>
+        [HarmonyPrefix, HarmonyPatch(typeof(AResearchTechPanel), "OnTechButtonClicked")]
+        public static bool Override_OnTechButtonClicked_1(ref AResearchTechPanel __instance, ACard techCard)
+        {
+            if (toggleTechShiftClick && AInputHandler.IsShiftActive())
+            {
+                Traverse.Create(__instance).Field("ParentAgePanel").Field("ResearchDialog").GetValue<AResearchDialog>().ForceResearch(techCard, true);
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// 可Shift点下时代科技
         /// </summary>
         [HarmonyPrefix, HarmonyPatch(typeof(AResearchFutureAge), "OnTechButtonClicked")]
-        public static bool Override_OnTechButtonClicked(ref AResearchFutureAge __instance, ACard techCard)
+        public static bool Override_OnTechButtonClicked_2(ref AResearchFutureAge __instance, ACard techCard)
         {
-            if (ADevConfig.EnableTechShiftClick && AInputHandler.IsShiftActive())
+            if (toggleTechShiftClick && AInputHandler.IsShiftActive())
             {
                 Traverse.Create(__instance).Field("ResearchDialog").GetValue<AResearchDialog>().ForceResearch(techCard, true);
                 return false;
@@ -325,7 +339,7 @@ namespace Millennia_IGE
         // Token: 0x04000006 RID: 6
 
         // Token: 0x04000007 RID: 7
-        private Rect windowRect = new Rect(0f, (float)(Screen.height - 450), 500f, 400f);
+        private Rect windowRect = new Rect(0f, (float)(Screen.height - 500), 500f, 450f);
 
         // Token: 0x04000008 RID: 8
         private int currentGridIndex;
@@ -340,7 +354,7 @@ namespace Millennia_IGE
         };
 
         // Token: 0x0400000B RID: 11
-        private bool toggleTechShiftClick;
+        private static bool toggleTechShiftClick;
 
         // Token: 0x0400000E RID: 14
         private int currentTerrainIndex;
