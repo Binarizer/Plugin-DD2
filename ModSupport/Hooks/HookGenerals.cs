@@ -38,7 +38,7 @@ namespace Millennia
             {
                 revealRadius = 2;
             }
-            if (!(forLoc == null) && !forLoc.AdjustVisibleRadius(__instance.PlayerNum, visDelta, revealRadius, out changedLocs, setEdgeData))
+            if (!(forLoc == null) && !forLoc.AdjustVisibleRadius(__instance.PlayerNum, visDelta, revealRadius, ref changedLocs, setEdgeData))
             {
                 if (visDelta > 0)
                 {

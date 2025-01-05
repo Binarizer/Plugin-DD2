@@ -254,8 +254,7 @@ namespace Millennia_IGE
                         if (flag18)
                         {
                             AEntityTile tile = selectedTile.GetTile();
-                            string bonusStr = (tile != null) ? ((tile.GetDisplayName() == "") ? "无" : tile.GetDisplayName()) : "无";
-                            GUILayout.Label($"地形: {AStringTable.Instance.GetString("Game-Terrain-" + selectedTile.TerrainType)}, 资源: {bonusStr}");
+                            GUILayout.Label($"地形: {AStringTable.Instance.GetString("Game-Terrain-" + selectedTile.TerrainType)}");
                             List<string> terrainId = new List<string>();
                             List<string> terrainText = new List<string>();
                             foreach (var id in AMapController.Instance?.TerrainTypes.Keys)
@@ -269,12 +268,23 @@ namespace Millennia_IGE
                             {
                                 selectedTile.ChangeTerrain(terrainId[currentTerrainIndex]);
                             }
+                        }
+                        break;
+                    }
+                case 4:
+                    {
+                        bool flag18 = selectedTile != null;
+                        if (flag18)
+                        {
+                            AEntityTile tile = selectedTile.GetTile();
+                            string bonusStr = (tile != null) ? ((tile.GetDisplayName() == "") ? "无" : tile.GetDisplayName()) : "无";
+                            GUILayout.Label($"资源: {bonusStr}");
                             var bonusTileIds = new Dictionary<string, string>
                             {
                                 { "MT_EMPTY", "无" }
                             };
                             var bonusTileIdList = from i in AEntityInfoManager.Instance.GetAllWithTag(AEntityTile.cBonusTile)
-                                                                select i.ID;
+                                                  select i.ID;
                             foreach (string bonusId in bonusTileIdList)
                             {
                                 bool flag20 = !bonusId.Contains("BASE");
@@ -350,7 +360,8 @@ namespace Millennia_IGE
             "玩家",
             "城市",
             "单位",
-            "地图"
+            "地形",
+            "资源"
         };
 
         // Token: 0x0400000B RID: 11
